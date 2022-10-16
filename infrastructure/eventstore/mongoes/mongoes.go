@@ -28,9 +28,10 @@ func (s *MongodbEventStore) GetSnapshot(ctx context.Context, aggregateID string)
 	}
 
 	var snapshotData eventsourcing.AggregateSnapshotData
-	singleResult := s.db.Collection("aggregatesnapshots").FindOne(ctx, bson.M{
-		"aggregateid": aggregateID,
-	})
+	singleResult := s.db.Collection("aggregatesnapshots").FindOne(ctx,
+		bson.M{
+			"aggregateid": aggregateID,
+		})
 	err := singleResult.Err()
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -70,13 +71,14 @@ func (s *MongodbEventStore) QueryEventStreamList(ctx context.Context, aggregateI
 		panic("field 'db' is null in 'MongodbEventStore'")
 	}
 
-	cur, err := s.db.Collection("eventstreams").Find(ctx, bson.M{
-		"aggregateid": aggregateID,
-		"streamversion": bson.M{
-			"$gte": startVersion,
-			"$lte": endVersion,
-		},
-	})
+	cur, err := s.db.Collection("eventstreams").Find(ctx,
+		bson.M{
+			"aggregateid": aggregateID,
+			"streamversion": bson.M{
+				"$gte": startVersion,
+				"$lte": endVersion,
+			},
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +93,30 @@ func (s *MongodbEventStore) QueryEventStreamList(ctx context.Context, aggregateI
 func (s *MongodbEventStore) AppendEventStream(ctx context.Context, data eventsourcing.EventStreamData) error {
 	if s.db == nil {
 		panic("field 'db' is null in 'MongodbEventStore'")
+	}
+
+	if data.StreamVersion > 1 {
+		singleResult := s.db.Collection("eventstreams").FindOne(ctx,
+			bson.M{
+				"aggregateid": data.AggregateID,
+			},
+			options.FindOne().SetSort(bson.M{"streamversion": -1}),
+		)
+		err := singleResult.Err()
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return fmt.Errorf("%w: expected is %d, actual is %d", domain.ErrUnexpectedVersion, 1, data.StreamVersion)
+			}
+			return err
+		}
+		var existsMaxEventStreamData eventsourcing.EventStreamData
+		err = singleResult.Decode(&existsMaxEventStreamData)
+		if err != nil {
+			return err
+		}
+		if existsMaxEventStreamData.StreamVersion+1 != data.StreamVersion {
+			return fmt.Errorf("%w: expected is %d, actual is %d", domain.ErrUnexpectedVersion, existsMaxEventStreamData.StreamVersion+1, data.StreamVersion)
+		}
 	}
 
 	_, err := s.db.Collection("eventstreams").InsertOne(ctx, data)
