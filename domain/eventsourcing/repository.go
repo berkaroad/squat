@@ -74,6 +74,10 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 		panic("field 'Store' is null")
 	}
 
+	if len(aggregate.Changes()) == 0 {
+		return nil
+	}
+
 	eventStream := domain.EventStream{
 		AggregateID:   aggregate.AggregateID(),
 		StreamVersion: aggregate.AggregateVersion(),
