@@ -5,39 +5,38 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/berkaroad/squat/domain"
-	"github.com/berkaroad/squat/domain/eventsourcing"
+	"github.com/berkaroad/squat/eventstore"
 )
 
-var _ eventsourcing.EventStore = (*InMemoryEventStore)(nil)
+var _ eventstore.EventStore = (*InMemoryEventStore)(nil)
 
 type InMemoryEventStore struct {
 	snapshotMapper    sync.Map
 	eventstreamMapper sync.Map
 }
 
-func (s *InMemoryEventStore) GetSnapshot(ctx context.Context, aggregateID string) (eventsourcing.AggregateSnapshotData, error) {
-	var snapshotData eventsourcing.AggregateSnapshotData
+func (s *InMemoryEventStore) GetSnapshot(ctx context.Context, aggregateID string) (eventstore.AggregateSnapshotData, error) {
+	var snapshotData eventstore.AggregateSnapshotData
 	snapshotDataObj, ok := s.snapshotMapper.Load(aggregateID)
 	if !ok {
 		return snapshotData, nil
 	}
-	snapshotData = snapshotDataObj.(eventsourcing.AggregateSnapshotData)
+	snapshotData = snapshotDataObj.(eventstore.AggregateSnapshotData)
 	return snapshotData, nil
 }
 
-func (s *InMemoryEventStore) SaveSnapshot(ctx context.Context, data eventsourcing.AggregateSnapshotData) error {
+func (s *InMemoryEventStore) SaveSnapshot(ctx context.Context, data eventstore.AggregateSnapshotData) error {
 	s.snapshotMapper.Store(data.AggregateID, data)
 	return nil
 }
 
-func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregateID string, startVersion, endVersion int) (eventsourcing.EventStreamDataSlice, error) {
-	eventStreamDatas := make(eventsourcing.EventStreamDataSlice, 0)
+func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregateID string, startVersion, endVersion int) (eventstore.EventStreamDataSlice, error) {
+	eventStreamDatas := make(eventstore.EventStreamDataSlice, 0)
 	eventstreamDatasObj, ok := s.eventstreamMapper.Load(aggregateID)
 	if !ok {
 		return eventStreamDatas, nil
 	}
-	eventStreamDatas = eventstreamDatasObj.(eventsourcing.EventStreamDataSlice)
+	eventStreamDatas = eventstreamDatasObj.(eventstore.EventStreamDataSlice)
 	if len(eventStreamDatas) == 0 {
 		return eventStreamDatas, nil
 	}
@@ -51,14 +50,14 @@ func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregate
 	return eventStreamDatas, nil
 }
 
-func (s *InMemoryEventStore) AppendEventStream(ctx context.Context, data eventsourcing.EventStreamData) error {
-	eventStreamDatas := make(eventsourcing.EventStreamDataSlice, 0)
+func (s *InMemoryEventStore) AppendEventStream(ctx context.Context, data eventstore.EventStreamData) error {
+	eventStreamDatas := make(eventstore.EventStreamDataSlice, 0)
 	eventstreamDatasObj, ok := s.eventstreamMapper.Load(data.AggregateID)
 	if ok {
-		eventStreamDatas = eventstreamDatasObj.(eventsourcing.EventStreamDataSlice)
+		eventStreamDatas = eventstreamDatasObj.(eventstore.EventStreamDataSlice)
 	}
 	if len(eventStreamDatas)+1 != data.StreamVersion {
-		return fmt.Errorf("%w: expected is %d, actual is %d", domain.ErrUnexpectedVersion, len(eventStreamDatas)+1, data.StreamVersion)
+		return fmt.Errorf("%w: expected is %d, actual is %d", eventstore.ErrUnexpectedVersion, len(eventStreamDatas)+1, data.StreamVersion)
 	}
 	eventStreamDatas = append(eventStreamDatas, data)
 	s.eventstreamMapper.Store(data.AggregateID, eventStreamDatas)
