@@ -1,20 +1,23 @@
-package eventsourcing
+package repository
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"reflect"
 
 	"github.com/berkaroad/squat/domain"
+	"github.com/berkaroad/squat/domain/eventsourcing"
+	"github.com/berkaroad/squat/eventstore"
 	"github.com/berkaroad/squat/serialization"
 )
 
-var _ domain.Repository[*NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*NullEventSourcedAggregate])(nil)
-var _ AggregateSnapshoter[*NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*NullEventSourcedAggregate])(nil)
+var _ domain.Repository[*eventsourcing.NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*eventsourcing.NullEventSourcedAggregate])(nil)
+var _ eventsourcing.AggregateSnapshoter[*eventsourcing.NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*eventsourcing.NullEventSourcedAggregate])(nil)
 
-type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
+type EventSourcedRepositoryBase[T eventsourcing.EventSourcedAggregate] struct {
 	Serializer      serialization.Serializer
-	Store           EventStore
+	Store           eventstore.EventStore
 	SnapshotEnabled bool
 }
 
@@ -32,7 +35,7 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 		panic("field 'Store' is null")
 	}
 
-	var snapshot AggregateSnapshot
+	var snapshot eventsourcing.AggregateSnapshot
 	var startVersion int
 	if r.SnapshotEnabled {
 		snapshotData, err := r.Store.GetSnapshot(ctx, aggregateID)
@@ -149,4 +152,71 @@ func (r *EventSourcedRepositoryBase[T]) GetSnapshot(ctx context.Context, aggrega
 		aggregate.Restore(nil, eventStreams)
 	}
 	return aggregate, nil
+}
+
+func ToAggregateSnapshot(serializer serialization.Serializer, asd eventstore.AggregateSnapshotData) (eventsourcing.AggregateSnapshot, error) {
+	snapshotObj, err := serialization.Deserialize(serializer, asd.SnapshotType, []byte(asd.Body))
+	if err != nil {
+		return nil, err
+	}
+	snapshot, ok := snapshotObj.(eventsourcing.AggregateSnapshot)
+	if !ok {
+		return nil, fmt.Errorf("cann't cast '%#v' to 'eventsourcing.AggregateSnapshot'", snapshotObj)
+	}
+	return snapshot, nil
+}
+
+func ToAggregateSnapshotData(serializer serialization.Serializer, as eventsourcing.AggregateSnapshot) (eventstore.AggregateSnapshotData, error) {
+	asd := eventstore.AggregateSnapshotData{
+		AggregateID:     as.AggregateID(),
+		SnapshotVersion: as.SnapshotVersion(),
+		SnapshotType:    as.TypeName(),
+	}
+	body, err := serialization.Serialize(serializer, as)
+	if err != nil {
+		return asd, err
+	}
+	asd.Body = string(body)
+	return asd, nil
+}
+
+func ToEventStream(serializer serialization.Serializer, esd eventstore.EventStreamData) (domain.EventStream, error) {
+	es := domain.EventStream{
+		AggregateID:   esd.AggregateID,
+		StreamVersion: esd.StreamVersion,
+		Events:        make([]domain.DomainEvent, len(esd.Events)),
+	}
+	for i, eventData := range esd.Events {
+		eventObj, err := serialization.Deserialize(serializer, eventData.EventType, []byte(eventData.Body))
+		if err != nil {
+			return es, err
+		}
+		event, ok := eventObj.(domain.DomainEvent)
+		if !ok {
+			return es, fmt.Errorf("cann't cast '%#v' to 'domain.DomainEvent'", eventObj)
+		}
+		es.Events[i] = event
+	}
+	return es, nil
+}
+
+func ToEventStreamData(serializer serialization.Serializer, es domain.EventStream) (eventstore.EventStreamData, error) {
+	esd := eventstore.EventStreamData{
+		AggregateID:   es.AggregateID,
+		StreamVersion: es.StreamVersion,
+		Events:        make([]eventstore.DomainEventData, len(es.Events)),
+	}
+	for i, event := range es.Events {
+		body, err := serialization.Serialize(serializer, event)
+		if err != nil {
+			return esd, err
+		}
+		esd.Events[i] = eventstore.DomainEventData{
+			EventID:   event.EventID(),
+			EventType: event.TypeName(),
+			OccurTime: event.OccurTime().Unix(),
+			Body:      string(body),
+		}
+	}
+	return esd, nil
 }
