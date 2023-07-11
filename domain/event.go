@@ -20,11 +20,16 @@ func NewDomainEventBase() DomainEventBase {
 	}
 }
 
+var _ DomainEvent = DomainEventBase{}
+
 type DomainEventBase struct {
 	E_ID string
 	E_Ts int64
 }
 
+func (e DomainEventBase) TypeName() string {
+	panic("method 'TypeName()' not impletement")
+}
 func (e DomainEventBase) EventID() string {
 	return e.E_ID
 }
