@@ -1,4 +1,4 @@
-package repository
+package eventsourcing
 
 import (
 	"context"
@@ -7,15 +7,14 @@ import (
 	"reflect"
 
 	"github.com/berkaroad/squat/domain"
-	"github.com/berkaroad/squat/domain/eventsourcing"
 	"github.com/berkaroad/squat/eventstore"
 	"github.com/berkaroad/squat/serialization"
 )
 
-var _ domain.Repository[*eventsourcing.NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*eventsourcing.NullEventSourcedAggregate])(nil)
-var _ eventsourcing.AggregateSnapshoter[*eventsourcing.NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*eventsourcing.NullEventSourcedAggregate])(nil)
+var _ domain.Repository[*NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*NullEventSourcedAggregate])(nil)
+var _ AggregateSnapshoter[*NullEventSourcedAggregate] = (*EventSourcedRepositoryBase[*NullEventSourcedAggregate])(nil)
 
-type EventSourcedRepositoryBase[T eventsourcing.EventSourcedAggregate] struct {
+type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
 	Serializer      serialization.Serializer
 	Store           eventstore.EventStore
 	SnapshotEnabled bool
@@ -35,7 +34,7 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 		panic("field 'Store' is null")
 	}
 
-	var snapshot eventsourcing.AggregateSnapshot
+	var snapshot AggregateSnapshot
 	var startVersion int
 	if r.SnapshotEnabled {
 		snapshotData, err := r.Store.GetSnapshot(ctx, aggregateID)
@@ -154,19 +153,19 @@ func (r *EventSourcedRepositoryBase[T]) GetSnapshot(ctx context.Context, aggrega
 	return aggregate, nil
 }
 
-func ToAggregateSnapshot(serializer serialization.Serializer, asd eventstore.AggregateSnapshotData) (eventsourcing.AggregateSnapshot, error) {
+func ToAggregateSnapshot(serializer serialization.Serializer, asd eventstore.AggregateSnapshotData) (AggregateSnapshot, error) {
 	snapshotObj, err := serialization.Deserialize(serializer, asd.SnapshotType, []byte(asd.Body))
 	if err != nil {
 		return nil, err
 	}
-	snapshot, ok := snapshotObj.(eventsourcing.AggregateSnapshot)
+	snapshot, ok := snapshotObj.(AggregateSnapshot)
 	if !ok {
-		return nil, fmt.Errorf("cann't cast '%#v' to 'eventsourcing.AggregateSnapshot'", snapshotObj)
+		return nil, fmt.Errorf("cann't cast '%#v' to 'AggregateSnapshot'", snapshotObj)
 	}
 	return snapshot, nil
 }
 
-func ToAggregateSnapshotData(serializer serialization.Serializer, as eventsourcing.AggregateSnapshot) (eventstore.AggregateSnapshotData, error) {
+func ToAggregateSnapshotData(serializer serialization.Serializer, as AggregateSnapshot) (eventstore.AggregateSnapshotData, error) {
 	asd := eventstore.AggregateSnapshotData{
 		AggregateID:     as.AggregateID(),
 		SnapshotVersion: as.SnapshotVersion(),
