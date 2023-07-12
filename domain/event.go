@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/berkaroad/squat/serialization"
-	"github.com/google/uuid"
 )
 
 type DomainEvent interface {
@@ -13,9 +12,9 @@ type DomainEvent interface {
 	OccurTime() time.Time
 }
 
-func NewDomainEventBase() DomainEventBase {
+func NewDomainEventBase(eventID string) DomainEventBase {
 	return DomainEventBase{
-		E_ID: uuid.New().String(),
+		E_ID: eventID,
 		E_Ts: time.Now().Unix(),
 	}
 }
@@ -32,9 +31,6 @@ func (e DomainEventBase) TypeName() string {
 }
 func (e DomainEventBase) EventID() string {
 	return e.E_ID
-}
-func (e DomainEventBase) EventType() string {
-	panic("method 'EventType()' not impletement")
 }
 func (e DomainEventBase) OccurTime() time.Time {
 	return time.Unix(e.E_Ts, 0)
