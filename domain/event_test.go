@@ -1,13 +1,15 @@
 package domain
 
 import (
+	"math/rand"
+	"strconv"
 	"testing"
 )
 
 func TestNewDomainEventBase(t *testing.T) {
 	events := make([]DomainEventBase, 0)
 	for i := 0; i < 10; i++ {
-		events = append(events, NewDomainEventBase())
+		events = append(events, NewDomainEventBase(strconv.Itoa(rand.Int())))
 	}
 
 	eIDMapper := make(map[string]struct{})
@@ -28,7 +30,7 @@ func TestNewDomainEventBase(t *testing.T) {
 func TestDomainEventBase_EventID(t *testing.T) {
 	events := make([]DomainEventBase, 0)
 	for i := 0; i < 10; i++ {
-		events = append(events, NewDomainEventBase())
+		events = append(events, NewDomainEventBase(strconv.Itoa(rand.Int())))
 	}
 
 	for _, event := range events {
@@ -38,21 +40,21 @@ func TestDomainEventBase_EventID(t *testing.T) {
 	}
 }
 
-func TestDomainEventBase_EventType(t *testing.T) {
+func TestDomainEventBase_TypeName(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Errorf("NewDomainEventBase.EventType() should panic")
+			t.Errorf("NewDomainEventBase.TypeName() should panic")
 		}
 	}()
 
-	event := NewDomainEventBase()
-	event.EventType()
+	event := NewDomainEventBase(strconv.Itoa(rand.Int()))
+	event.TypeName()
 }
 
 func TestDomainEventBase_OccurTime(t *testing.T) {
 	events := make([]DomainEventBase, 0)
 	for i := 0; i < 10; i++ {
-		events = append(events, NewDomainEventBase())
+		events = append(events, NewDomainEventBase(strconv.Itoa(rand.Int())))
 	}
 
 	for _, event := range events {
