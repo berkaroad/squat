@@ -11,7 +11,7 @@ type EventBus interface {
 }
 
 type EventProcessor interface {
-	Process(ctx context.Context)
+	Process(ctx context.Context) <-chan struct{}
 }
 
 type EventHandleFunc func(ctx context.Context, data EventData) error

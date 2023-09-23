@@ -21,7 +21,7 @@ var (
 
 type Mailbox interface {
 	Name() string
-	Receive(data *EventData) (chan EventHandleResult, error)
+	Receive(data *EventData, resultCh chan EventHandleResult) error
 }
 
 type EventHandleResult struct {
@@ -71,7 +71,7 @@ func (p *DefaultMailboxProvider) GetMailbox(eventSourceID string, eventSourceTyp
 		handlerFailRetryInterval: p.HandlerFailRetryInterval,
 		handlerFailMaxRetryCount: p.HandlerFailMaxRetryCount,
 		autoReleaseTimeout:       autoReleaseTimeout,
-		receiver:                 make(chan eventDataWithResult, p.MailboxCapacity),
+		receiverCh:               make(chan eventDataWithResult, p.MailboxCapacity),
 		handlers:                 handlers,
 		logger: slog.Default().With(
 			slog.String("mailbox", mailboxName),
@@ -89,7 +89,7 @@ func (p *DefaultMailboxProvider) GetMailbox(eventSourceID string, eventSourceTyp
 			handlerFailRetryInterval: p.HandlerFailRetryInterval,
 			handlerFailMaxRetryCount: p.HandlerFailMaxRetryCount,
 			autoReleaseTimeout:       autoReleaseTimeout,
-			receiver:                 make(chan eventDataWithResult, p.MailboxCapacity),
+			receiverCh:               make(chan eventDataWithResult, p.MailboxCapacity),
 			handlers:                 handlers,
 			logger: slog.Default().With(
 				slog.String("mailbox", mailboxName),
@@ -130,7 +130,7 @@ type defaultMailbox struct {
 	handlerFailRetryInterval time.Duration
 	handlerFailMaxRetryCount int
 	autoReleaseTimeout       time.Duration
-	receiver                 chan eventDataWithResult
+	receiverCh               chan eventDataWithResult
 	handlers                 map[string][]EventHandler
 	logger                   *slog.Logger
 
@@ -141,25 +141,24 @@ func (mb *defaultMailbox) Name() string {
 	return mb.name
 }
 
-func (mb *defaultMailbox) Receive(data *EventData) (chan EventHandleResult, error) {
+func (mb *defaultMailbox) Receive(data *EventData, resultCh chan EventHandleResult) error {
 	mb.status.CompareAndSwap(statusActived, statusActivating)
 	mb.status.CompareAndSwap(statusDisactived, statusActivating)
 	if mb.status.Load() == statusDestoryed {
 		err := ErrMailboxDestoryed
 		mb.logger.Error(err.Error())
-		return nil, err
+		return err
 	}
-	result := make(chan EventHandleResult, 1)
-	mb.receiver <- eventDataWithResult{
+	mb.receiverCh <- eventDataWithResult{
 		EventData: data,
-		Result:    result,
+		ResultCh:  resultCh,
 	}
 	mb.status.CompareAndSwap(statusActivating, statusActived)
 	if mb.logger.Enabled(context.Background(), slog.LevelDebug) {
 		dataBytes, _ := json.Marshal(data)
 		mb.logger.Debug("receive event handler data", slog.Any("eventhandler-data", dataBytes))
 	}
-	return result, nil
+	return nil
 }
 
 func (mb *defaultMailbox) initialize(removeSelf func(string)) {
@@ -180,7 +179,7 @@ func (mb *defaultMailbox) initialize(removeSelf func(string)) {
 	loop:
 		for {
 			select {
-			case data := <-mb.receiver:
+			case data := <-mb.receiverCh:
 				eventID := data.EventData.Event.EventID()
 				eventTypeName := data.EventData.Event.TypeName()
 				eventSourceID := data.EventData.EventSourceID
@@ -188,8 +187,8 @@ func (mb *defaultMailbox) initialize(removeSelf func(string)) {
 				logger := mb.logger.With(
 					slog.String("event-id", eventID),
 					slog.String("event-type", eventTypeName),
-					slog.String("eventsource-id", eventSourceID),
-					slog.String("eventsource-type", eventSourceTypeName),
+					slog.String("event-source-id", eventSourceID),
+					slog.String("event-source-type", eventSourceTypeName),
 				)
 				bgCtx := logging.NewContext(context.Background(), logger)
 
@@ -217,7 +216,7 @@ func (mb *defaultMailbox) initialize(removeSelf func(string)) {
 						}
 					}
 				}
-				data.Result <- EventHandleResult{
+				data.ResultCh <- EventHandleResult{
 					Err: handleErr,
 				}
 			case <-time.After(autoReleaseTimeout):
@@ -225,10 +224,10 @@ func (mb *defaultMailbox) initialize(removeSelf func(string)) {
 				mb.status.CompareAndSwap(statusDisactived, statusDestoryed)
 				if mb.status.Load() == statusDestoryed {
 					time.Sleep(time.Second)
-					if len(mb.receiver) > 0 {
+					if len(mb.receiverCh) > 0 {
 						continue
 					}
-					close(mb.receiver)
+					close(mb.receiverCh)
 					break loop
 				}
 			}
@@ -240,5 +239,5 @@ func (mb *defaultMailbox) initialize(removeSelf func(string)) {
 
 type eventDataWithResult struct {
 	EventData *EventData
-	Result    chan EventHandleResult
+	ResultCh  chan EventHandleResult
 }

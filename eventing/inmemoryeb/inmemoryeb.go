@@ -16,16 +16,16 @@ var _ eventing.EventDispatcher = (*InMemoryEventBus)(nil)
 type InMemoryEventBus struct {
 	eventing.EventDispatcher
 
-	receiver chan *eventing.EventData
+	receiverCh chan *eventing.EventData
 }
 
 func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
-	if eb.receiver == nil {
+	if eb.receiverCh == nil {
 		panic("field 'receiver' is null")
 	}
 
 	for _, event := range es.Events {
-		eb.receiver <- &eventing.EventData{
+		eb.receiverCh <- &eventing.EventData{
 			EventSourceID:       es.AggregateID,
 			EventSourceTypeName: es.AggregateTypeName,
 			StreamVersion:       es.StreamVersion,
@@ -35,9 +35,9 @@ func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
 	return nil
 }
 
-func (eb *InMemoryEventBus) Process(ctx context.Context) {
-	if eb.receiver == nil {
-		eb.receiver = make(chan *eventing.EventData)
+func (eb *InMemoryEventBus) Process(ctx context.Context) <-chan struct{} {
+	if eb.receiverCh == nil {
+		eb.receiverCh = make(chan *eventing.EventData, 1)
 	}
 
 	dispatcher := eb.EventDispatcher
@@ -45,21 +45,24 @@ func (eb *InMemoryEventBus) Process(ctx context.Context) {
 		dispatcher = &eventing.DefaultEventDispatcher{}
 	}
 
+	doneCh := make(chan struct{})
 	go func() {
 	loop:
 		for {
 			select {
-			case data := <-eb.receiver:
+			case data := <-eb.receiverCh:
 				dispatcher.Dispatch(data)
 			case <-ctx.Done():
 				time.Sleep(time.Second * 3)
-				if len(eb.receiver) > 0 {
+				if len(eb.receiverCh) > 0 {
 					continue
 				}
 				<-goroutine.Wait()
-				close(eb.receiver)
+				close(eb.receiverCh)
 				break loop
 			}
 		}
+		close(doneCh)
 	}()
+	return doneCh
 }

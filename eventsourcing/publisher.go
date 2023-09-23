@@ -25,17 +25,17 @@ type eventPublisher struct {
 	PublishedStore publishedstore.PublishedStore
 	Serializer     serialization.Serializer
 
-	receiver chan domain.EventStream
-	initOnce sync.Once
+	receiverCh chan domain.EventStream
+	initOnce   sync.Once
 }
 
 func (p *eventPublisher) Publish(ctx context.Context, eventStream domain.EventStream) {
-	p.receiver <- eventStream
+	p.receiverCh <- eventStream
 }
 
 func (p *eventPublisher) Initialize(ctx context.Context) *eventPublisher {
 	p.initOnce.Do(func() {
-		p.receiver = make(chan domain.EventStream)
+		p.receiverCh = make(chan domain.EventStream, 1)
 
 		goroutine.Go(ctx, func(ctx context.Context) {
 			baseLogger := logging.Get(ctx)
@@ -46,7 +46,7 @@ func (p *eventPublisher) Initialize(ctx context.Context) *eventPublisher {
 		loop:
 			for {
 				select {
-				case eventStream := <-p.receiver:
+				case eventStream := <-p.receiverCh:
 					if eventStream.AggregateID == "" {
 						baseLogger.Error("aggregate-id of from eventstream is empty")
 						continue
@@ -177,10 +177,10 @@ func (p *eventPublisher) Initialize(ctx context.Context) *eventPublisher {
 					}
 				case <-ctx.Done():
 					time.Sleep(time.Second * 3)
-					if len(p.receiver) > 0 {
+					if len(p.receiverCh) > 0 {
 						continue
 					}
-					close(p.receiver)
+					close(p.receiverCh)
 					break loop
 				}
 			}
