@@ -37,9 +37,10 @@ func (e DomainEventBase) OccurTime() time.Time {
 }
 
 type EventStream struct {
-	AggregateID   string
-	StreamVersion int
-	Events        []DomainEvent
+	AggregateID       string
+	AggregateTypeName string
+	StreamVersion     int
+	Events            []DomainEvent
 }
 
 type EventStreamSlice []EventStream
