@@ -5,30 +5,22 @@ import (
 )
 
 type EventStore interface {
-	GetSnapshot(ctx context.Context, aggregateID string) (AggregateSnapshotData, error)
-	SaveSnapshot(ctx context.Context, data AggregateSnapshotData) error
 	QueryEventStreamList(ctx context.Context, aggregateID string, startVersion, endVersion int) (EventStreamDataSlice, error)
 	AppendEventStream(ctx context.Context, data EventStreamData) error
 }
 
-type AggregateSnapshotData struct {
-	AggregateID     string `json:"AggregateID"`
-	SnapshotVersion int    `json:"SnapshotVersion"`
-	SnapshotType    string `json:"SnapshotType"`
-	Body            string `json:"Body"`
-}
-
 type DomainEventData struct {
-	EventID   string `json:"EventID"`
-	EventType string `json:"EventType"`
-	OccurTime int64  `json:"OccurTime"`
-	Body      string `json:"Body"`
+	EventID   string `json:"event_id" bson:"event_id"`
+	EventType string `json:"event_type" bson:"event_type"`
+	OccurTime int64  `json:"occur_time" bson:"occur_time"`
+	Body      string `json:"body" bson:"body"`
 }
 
 type EventStreamData struct {
-	AggregateID   string            `json:"AggregateID"`
-	StreamVersion int               `json:"StreamVersion"`
-	Events        []DomainEventData `json:"Events"`
+	AggregateID       string            `json:"aggregate_id" bson:"aggregate_id"`
+	AggregateTypeName string            `json:"aggregate_type_name" bson:"aggregate_type_name"`
+	StreamVersion     int               `json:"stream_version" bson:"stream_version"`
+	Events            []DomainEventData `json:"events" bson:"events"`
 }
 
 type EventStreamDataSlice []EventStreamData

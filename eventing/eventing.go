@@ -1,11 +1,38 @@
 package eventing
 
-import "github.com/berkaroad/squat/domain"
+import (
+	"context"
+
+	"github.com/berkaroad/squat/domain"
+)
 
 type EventBus interface {
-	Publish(es domain.EventStream)
+	Publish(es domain.EventStream) error
 }
 
-type EventHandler func(aggregateID string, streamVersion int, event domain.DomainEvent)
+type EventProcessor interface {
+	Process(ctx context.Context)
+}
 
-type EventStreamHandler func(es domain.EventStream)
+type EventHandleFunc func(ctx context.Context, data EventData) error
+
+type EventData struct {
+	EventSourceID       string
+	EventSourceTypeName string
+	StreamVersion       int
+	Event               domain.DomainEvent
+}
+
+type EventHandler struct {
+	Handle   EventHandleFunc
+	FuncName string
+}
+
+type EventHandlerGroup interface {
+	Handlers() map[string]EventHandler
+}
+
+type EventHandlerProxy interface {
+	Name() string
+	Wrap(handle EventHandleFunc) EventHandleFunc
+}

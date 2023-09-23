@@ -20,6 +20,7 @@ type EventSourcedAggregate interface {
 type AggregateSnapshot interface {
 	serialization.Serializable
 	AggregateID() string
+	AggregateTypeName() string
 	SnapshotVersion() int
 }
 

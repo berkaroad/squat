@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math/rand"
+	"sort"
 	"strconv"
 	"testing"
 )
@@ -60,6 +61,25 @@ func TestDomainEventBase_OccurTime(t *testing.T) {
 	for _, event := range events {
 		if event.E_Ts != event.OccurTime().Unix() {
 			t.Errorf("NewDomainEventBase.OccurTime() not equal with E_Ts")
+		}
+	}
+}
+
+func TestSortEventStreamSlice(t *testing.T) {
+	eventstreams := make(EventStreamSlice, 0)
+	for i := 10; i >= 1; i-- {
+		eventstreams = append(eventstreams, EventStream{
+			AggregateID:       "001",
+			AggregateTypeName: "fruit",
+			StreamVersion:     i,
+			Events:            []DomainEvent{NewDomainEventBase(strconv.Itoa(rand.Int()))},
+		})
+	}
+
+	sort.Sort(eventstreams)
+	for i := 0; i < 10; i++ {
+		if eventstreams[i].StreamVersion != i+1 {
+			t.Errorf("eventstreams should sort by 'StreamVersion")
 		}
 	}
 }

@@ -5,29 +5,13 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/berkaroad/squat/eventstore"
+	"github.com/berkaroad/squat/store/eventstore"
 )
 
 var _ eventstore.EventStore = (*InMemoryEventStore)(nil)
 
 type InMemoryEventStore struct {
-	snapshotMapper    sync.Map
 	eventstreamMapper sync.Map
-}
-
-func (s *InMemoryEventStore) GetSnapshot(ctx context.Context, aggregateID string) (eventstore.AggregateSnapshotData, error) {
-	var snapshotData eventstore.AggregateSnapshotData
-	snapshotDataObj, ok := s.snapshotMapper.Load(aggregateID)
-	if !ok {
-		return snapshotData, nil
-	}
-	snapshotData = snapshotDataObj.(eventstore.AggregateSnapshotData)
-	return snapshotData, nil
-}
-
-func (s *InMemoryEventStore) SaveSnapshot(ctx context.Context, data eventstore.AggregateSnapshotData) error {
-	s.snapshotMapper.Store(data.AggregateID, data)
-	return nil
 }
 
 func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregateID string, startVersion, endVersion int) (eventstore.EventStreamDataSlice, error) {
