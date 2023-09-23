@@ -18,7 +18,7 @@ var _ EventDispatcher = (*DefaultEventDispatcher)(nil)
 
 type DefaultEventDispatcher struct {
 	MailboxProvider MailboxProvider
-	Callback        func(data EventData, resultChan chan EventHandleResult)
+	Callback        func(data EventData, resultCh chan EventHandleResult)
 
 	handlers        map[string][]EventHandler
 	proxies         []EventHandlerProxy
@@ -112,15 +112,16 @@ func (ed *DefaultEventDispatcher) Dispatch(data *EventData) {
 	}
 
 	mb := mbp.GetMailbox(data.EventSourceID, data.EventSourceTypeName, ed.proxiedHandlers)
-	resultChan, err := mb.Receive(data)
+	resultCh := make(chan EventHandleResult, 1)
+	err := mb.Receive(data, resultCh)
 	for err != nil {
 		time.Sleep(time.Millisecond)
 		mb = mbp.GetMailbox(data.EventSourceID, data.EventSourceTypeName, ed.proxiedHandlers)
-		resultChan, err = mb.Receive(data)
+		err = mb.Receive(data, resultCh)
 	}
 
 	callback := ed.Callback
 	if callback != nil {
-		callback(*data, resultChan)
+		callback(*data, resultCh)
 	}
 }

@@ -17,15 +17,14 @@ func Go(ctx context.Context, action func(ctx context.Context)) {
 }
 
 func wait() <-chan struct{} {
-	done := make(chan struct{})
+	doneCh := make(chan struct{})
 	go func() {
 		for counter.Load() > 0 {
 			time.Sleep(time.Second)
 		}
-		close(done)
+		close(doneCh)
 	}()
-
-	return done
+	return doneCh
 }
 
 func count() int64 {
