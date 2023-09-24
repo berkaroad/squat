@@ -34,5 +34,5 @@ type EventHandlerGroup interface {
 
 type EventHandlerProxy interface {
 	Name() string
-	Wrap(handle EventHandleFunc) EventHandleFunc
+	Wrap(handleFuncName string, previousHandle EventHandleFunc) EventHandleFunc
 }
