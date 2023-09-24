@@ -51,7 +51,7 @@ func (ed *DefaultEventDispatcher) Subscribe(eventTypeName string, handler EventH
 
 	proxiedHande := handler.Handle
 	for _, proxy := range ed.proxies {
-		proxiedHande = proxy.Wrap(proxiedHande)
+		proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
 	}
 	proxiedHandler := EventHandler{
 		FuncName: handler.FuncName,
@@ -94,7 +94,7 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 		for i, handler := range handlers {
 			proxiedHande := handler.Handle
 			for _, proxy := range ed.proxies {
-				proxiedHande = proxy.Wrap(proxiedHande)
+				proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
 			}
 			proxiedHandler := EventHandler{
 				FuncName: handler.FuncName,
