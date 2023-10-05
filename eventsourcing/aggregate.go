@@ -93,15 +93,3 @@ func (s *EventSourcedAggregateBase) Restore(snapshot AggregateSnapshot, restoreS
 
 	return nil
 }
-
-var _ EventSourcedAggregate = (*NullEventSourcedAggregate)(nil)
-
-type NullEventSourcedAggregate struct{ domain.NullAggregate }
-
-func (a *NullEventSourcedAggregate) Changes() []domain.DomainEvent { return nil }
-func (a *NullEventSourcedAggregate) Apply(e domain.DomainEvent)    {}
-func (a *NullEventSourcedAggregate) AcceptChanges()                {}
-func (a *NullEventSourcedAggregate) Snapshot() AggregateSnapshot   { return nil }
-func (a *NullEventSourcedAggregate) Restore(snapshot AggregateSnapshot, eventStreams domain.EventStreamSlice) error {
-	return nil
-}

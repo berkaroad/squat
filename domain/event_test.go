@@ -73,6 +73,7 @@ func TestSortEventStreamSlice(t *testing.T) {
 			AggregateTypeName: "fruit",
 			StreamVersion:     i,
 			Events:            []DomainEvent{NewDomainEventBase(strconv.Itoa(rand.Int()))},
+			CommandID:         "command-001",
 		})
 	}
 

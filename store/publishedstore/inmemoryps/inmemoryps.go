@@ -7,6 +7,12 @@ import (
 	"github.com/berkaroad/squat/store/publishedstore"
 )
 
+var instance *InMemoryPublishedStore = &InMemoryPublishedStore{}
+
+func Default() *InMemoryPublishedStore {
+	return instance
+}
+
 var _ publishedstore.PublishedStore = (*InMemoryPublishedStore)(nil)
 
 type InMemoryPublishedStore struct {

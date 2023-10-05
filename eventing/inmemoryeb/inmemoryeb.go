@@ -1,7 +1,9 @@
 package inmemoryeb
 
 import (
-	"context"
+	"errors"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/berkaroad/squat/domain"
@@ -9,60 +11,81 @@ import (
 	"github.com/berkaroad/squat/utilities/goroutine"
 )
 
+var instance = &InMemoryEventBus{}
+
+func Default() *InMemoryEventBus {
+	return instance
+}
+
 var _ eventing.EventBus = (*InMemoryEventBus)(nil)
 var _ eventing.EventProcessor = (*InMemoryEventBus)(nil)
-var _ eventing.EventDispatcher = (*InMemoryEventBus)(nil)
 
 type InMemoryEventBus struct {
-	eventing.EventDispatcher
+	dispatcher eventing.EventDispatcher
 
-	receiverCh chan *eventing.EventData
+	initOnce    sync.Once
+	initialized bool
+	receiverCh  chan *domain.EventStream
+	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
+}
+
+func (eb *InMemoryEventBus) Initialize(dispatcher eventing.EventDispatcher) *InMemoryEventBus {
+	eb.initOnce.Do(func() {
+		if dispatcher == nil {
+			dispatcher = &eventing.DefaultEventDispatcher{}
+		}
+		eb.dispatcher = dispatcher
+		eb.receiverCh = make(chan *domain.EventStream, 1)
+		eb.initialized = true
+	})
+	return eb
 }
 
 func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
-	if eb.receiverCh == nil {
-		panic("field 'receiver' is null")
+	if !eb.initialized {
+		panic("not initialized")
 	}
 
-	for _, event := range es.Events {
-		eb.receiverCh <- &eventing.EventData{
-			EventSourceID:       es.AggregateID,
-			EventSourceTypeName: es.AggregateTypeName,
-			StreamVersion:       es.StreamVersion,
-			Event:               event,
-		}
+	if eb.status.Load() != 1 {
+		return errors.New("event processor has stopped")
 	}
+
+	eb.receiverCh <- &es
 	return nil
 }
 
-func (eb *InMemoryEventBus) Process(ctx context.Context) <-chan struct{} {
-	if eb.receiverCh == nil {
-		eb.receiverCh = make(chan *eventing.EventData, 1)
+func (eb *InMemoryEventBus) Start() {
+	if !eb.initialized {
+		panic("not initialized")
 	}
 
-	dispatcher := eb.EventDispatcher
-	if dispatcher == nil {
-		dispatcher = &eventing.DefaultEventDispatcher{}
-	}
-
-	doneCh := make(chan struct{})
-	go func() {
-	loop:
-		for {
-			select {
-			case data := <-eb.receiverCh:
-				dispatcher.Dispatch(data)
-			case <-ctx.Done():
-				time.Sleep(time.Second * 3)
-				if len(eb.receiverCh) > 0 {
-					continue
+	if eb.status.CompareAndSwap(0, 1) {
+		go func() {
+		loop:
+			for {
+				select {
+				case data := <-eb.receiverCh:
+					eb.dispatcher.Dispatch(data)
+				case <-time.After(time.Second):
+					if eb.status.Load() != 1 {
+						break loop
+					}
 				}
-				<-goroutine.Wait()
-				close(eb.receiverCh)
-				break loop
 			}
-		}
-		close(doneCh)
-	}()
-	return doneCh
+		}()
+	}
+}
+
+func (eb *InMemoryEventBus) Stop() {
+	if !eb.initialized {
+		panic("not initialized")
+	}
+
+	eb.status.CompareAndSwap(1, 2)
+	time.Sleep(time.Second * 3)
+	for len(eb.receiverCh) > 0 {
+		time.Sleep(time.Second)
+	}
+	<-goroutine.Wait()
+	eb.status.CompareAndSwap(2, 0)
 }
