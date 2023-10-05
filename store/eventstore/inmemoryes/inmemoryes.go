@@ -8,6 +8,12 @@ import (
 	"github.com/berkaroad/squat/store/eventstore"
 )
 
+var instance *InMemoryEventStore = &InMemoryEventStore{}
+
+func Default() *InMemoryEventStore {
+	return instance
+}
+
 var _ eventstore.EventStore = (*InMemoryEventStore)(nil)
 
 type InMemoryEventStore struct {

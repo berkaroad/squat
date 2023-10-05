@@ -13,6 +13,7 @@ func ToEventStream(serializer serialization.Serializer, esd EventStreamData) (do
 		AggregateTypeName: esd.AggregateTypeName,
 		StreamVersion:     esd.StreamVersion,
 		Events:            make([]domain.DomainEvent, len(esd.Events)),
+		CommandID:         esd.CommandID,
 	}
 	for i, eventData := range esd.Events {
 		eventObj, err := serialization.Deserialize(serializer, eventData.EventType, []byte(eventData.Body))
@@ -34,6 +35,7 @@ func ToEventStreamData(serializer serialization.Serializer, es domain.EventStrea
 		AggregateTypeName: es.AggregateTypeName,
 		StreamVersion:     es.StreamVersion,
 		Events:            make([]DomainEventData, len(es.Events)),
+		CommandID:         es.CommandID,
 	}
 	for i, event := range es.Events {
 		body, err := serialization.Serialize(serializer, event)

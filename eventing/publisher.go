@@ -1,4 +1,4 @@
-package eventsourcing
+package eventing
 
 import (
 	"context"
@@ -7,46 +7,72 @@ import (
 	"log/slog"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/berkaroad/squat/domain"
-	"github.com/berkaroad/squat/eventing"
-	"github.com/berkaroad/squat/internal/goroutine"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/serialization"
 	"github.com/berkaroad/squat/store/eventstore"
 	"github.com/berkaroad/squat/store/publishedstore"
+	"github.com/berkaroad/squat/utilities/goroutine"
 	"github.com/berkaroad/squat/utilities/retrying"
 )
 
-type eventPublisher struct {
-	EventBus       eventing.EventBus
-	EventStore     eventstore.EventStore
-	PublishedStore publishedstore.PublishedStore
-	Serializer     serialization.Serializer
-
-	receiverCh chan domain.EventStream
-	initOnce   sync.Once
+type EventPublisher interface {
+	Publish(ctx context.Context, eventStream domain.EventStream)
+	Start()
+	Stop()
 }
 
-func (p *eventPublisher) Publish(ctx context.Context, eventStream domain.EventStream) {
-	p.receiverCh <- eventStream
+var _ EventPublisher = (*DefaultEventPublisher)(nil)
+
+type DefaultEventPublisher struct {
+	eb         EventBus
+	es         eventstore.EventStore
+	ps         publishedstore.PublishedStore
+	serializer serialization.Serializer
+
+	initOnce    sync.Once
+	initialized bool
+	receiverCh  chan domain.EventStream
+	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
 }
 
-func (p *eventPublisher) Initialize(ctx context.Context) *eventPublisher {
-	p.initOnce.Do(func() {
-		p.receiverCh = make(chan domain.EventStream, 1)
+func (ep *DefaultEventPublisher) Initialize(
+	eventBus EventBus,
+	eventStore eventstore.EventStore,
+	publishedStore publishedstore.BatchSavingPublishedStore,
+	serializer serialization.Serializer,
+) *DefaultEventPublisher {
+	ep.initOnce.Do(func() {
+		ep.eb = eventBus
+		ep.es = eventStore
+		ep.ps = publishedStore
+		ep.serializer = serializer
 
-		goroutine.Go(ctx, func(ctx context.Context) {
-			baseLogger := logging.Get(ctx)
-			eventBus := p.EventBus
-			eventStore := p.EventStore
-			publishedStore := p.PublishedStore
-			serializer := p.Serializer
-		loop:
+		ep.receiverCh = make(chan domain.EventStream, 1)
+		ep.initialized = true
+	})
+	return ep
+}
+
+func (ep *DefaultEventPublisher) Publish(ctx context.Context, eventStream domain.EventStream) {
+	ep.receiverCh <- eventStream
+}
+
+func (ep *DefaultEventPublisher) Start() {
+	if ep.status.CompareAndSwap(0, 1) {
+		go func() {
+			baseLogger := logging.Get(context.Background())
+			eventBus := ep.eb
+			eventStore := ep.es
+			publishedStore := ep.ps
+			serializer := ep.serializer
+
 			for {
 				select {
-				case eventStream := <-p.receiverCh:
+				case eventStream := <-ep.receiverCh:
 					if eventStream.AggregateID == "" {
 						baseLogger.Error("aggregate-id of from eventstream is empty")
 						continue
@@ -175,16 +201,23 @@ func (p *eventPublisher) Initialize(ctx context.Context) *eventPublisher {
 							return true
 						})
 					}
-				case <-ctx.Done():
-					time.Sleep(time.Second * 3)
-					if len(p.receiverCh) > 0 {
-						continue
-					}
-					close(p.receiverCh)
-					break loop
+				case <-time.After(time.Second):
 				}
 			}
-		})
-	})
-	return p
+		}()
+	}
+}
+
+func (ep *DefaultEventPublisher) Stop() {
+	if !ep.initialized {
+		panic("not initialized")
+	}
+
+	ep.status.CompareAndSwap(1, 2)
+	time.Sleep(time.Second * 3)
+	for len(ep.receiverCh) > 0 {
+		time.Sleep(time.Second)
+	}
+	<-goroutine.Wait()
+	ep.status.CompareAndSwap(2, 0)
 }

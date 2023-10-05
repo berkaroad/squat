@@ -1,6 +1,10 @@
 package serialization
 
-var DefaultSerializer Serializer = JsonSerializer{}
+var defaultSerializer Serializer = &JsonSerializer{}
+
+func Default() Serializer {
+	return defaultSerializer
+}
 
 type Serializable interface {
 	TypeName() string
@@ -13,14 +17,14 @@ type Serializer interface {
 
 func Serialize(serializer Serializer, v Serializable) ([]byte, error) {
 	if serializer == nil {
-		serializer = DefaultSerializer
+		serializer = defaultSerializer
 	}
 	return serializer.Serialize(v)
 }
 
 func Deserialize(serializer Serializer, typeName string, data []byte) (any, error) {
 	if serializer == nil {
-		serializer = DefaultSerializer
+		serializer = defaultSerializer
 	}
 	v, err := NewFromTypeName(typeName)
 	if err != nil {

@@ -7,6 +7,12 @@ import (
 	"github.com/berkaroad/squat/store/snapshotstore"
 )
 
+var instance *InMemorySnapshotStore = &InMemorySnapshotStore{}
+
+func Default() *InMemorySnapshotStore {
+	return instance
+}
+
 var _ snapshotstore.SnapshotStore = (*InMemorySnapshotStore)(nil)
 
 type InMemorySnapshotStore struct {

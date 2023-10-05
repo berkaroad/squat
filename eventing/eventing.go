@@ -1,9 +1,8 @@
 package eventing
 
 import (
-	"context"
-
 	"github.com/berkaroad/squat/domain"
+	"github.com/berkaroad/squat/messaging"
 )
 
 type EventBus interface {
@@ -11,28 +10,50 @@ type EventBus interface {
 }
 
 type EventProcessor interface {
-	Process(ctx context.Context) <-chan struct{}
+	Start()
+	Stop()
 }
 
-type EventHandleFunc func(ctx context.Context, data EventData) error
+type EventHandleFunc = messaging.MessageHandleFunc[EventData]
 
 type EventData struct {
-	EventSourceID       string
-	EventSourceTypeName string
-	StreamVersion       int
-	Event               domain.DomainEvent
+	AggregateID       string
+	AggregateTypeName string
+	StreamVersion     int
+	Event             domain.DomainEvent
 }
 
-type EventHandler struct {
-	Handle   EventHandleFunc
-	FuncName string
-}
+type EventHandler messaging.MessageHandler[EventData]
 
 type EventHandlerGroup interface {
 	Handlers() map[string]EventHandler
 }
 
-type EventHandlerProxy interface {
-	Name() string
-	Wrap(handleFuncName string, previousHandle EventHandleFunc) EventHandleFunc
+type EventHandlerProxy messaging.MessageHandlerProxy[EventData]
+
+func CreateEventMail(data *EventData) messaging.Mail[EventData] {
+	return &eventMail{
+		eventData:   data,
+		DomainEvent: data.Event,
+	}
+}
+
+var _ messaging.Mail[EventData] = (*eventMail)(nil)
+
+type eventMail struct {
+	domain.DomainEvent
+	eventData *EventData
+}
+
+func (m *eventMail) Metadata() messaging.MessageMetadata {
+	return messaging.MessageMetadata{
+		ID:                m.DomainEvent.EventID(),
+		AggregateID:       m.eventData.AggregateID,
+		AggregateTypeName: m.eventData.AggregateTypeName,
+		Category:          "event",
+	}
+}
+
+func (m *eventMail) Unwrap() EventData {
+	return *m.eventData
 }

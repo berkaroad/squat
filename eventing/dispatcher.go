@@ -1,32 +1,65 @@
 package eventing
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"reflect"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/berkaroad/squat/commanding"
+	"github.com/berkaroad/squat/domain"
+	"github.com/berkaroad/squat/internal/goroutine"
+	"github.com/berkaroad/squat/logging"
+	"github.com/berkaroad/squat/messaging"
 )
+
+const CommandHandleResultProvider string = "eventing.dispatcher"
 
 type EventDispatcher interface {
 	Subscribe(eventTypeName string, handler EventHandler)
 	SubscribeMulti(handlerGroup EventHandlerGroup)
 	AddProxy(proxies ...EventHandlerProxy)
-	Dispatch(data *EventData)
+	Dispatch(data *domain.EventStream)
 }
 
 var _ EventDispatcher = (*DefaultEventDispatcher)(nil)
 
 type DefaultEventDispatcher struct {
-	MailboxProvider MailboxProvider
-	Callback        func(data EventData, resultCh chan EventHandleResult)
+	mailboxProvider messaging.MailboxProvider[EventData]
+	notifier        messaging.MessageHandleResultNotifier[EventData]
 
-	handlers        map[string][]EventHandler
-	proxies         []EventHandlerProxy
-	proxiedHandlers map[string][]EventHandler
+	initOnce        sync.Once
+	initialized     bool
+	handlers        map[string][]messaging.MessageHandler[EventData]
+	proxies         []messaging.MessageHandlerProxy[EventData]
+	proxiedHandlers map[string][]messaging.MessageHandler[EventData]
 	locker          sync.Mutex
 }
 
+func (ed *DefaultEventDispatcher) Initialize(mailboxProvider messaging.MailboxProvider[EventData], notifier messaging.MessageHandleResultNotifier[commanding.Command]) *DefaultEventDispatcher {
+	ed.initOnce.Do(func() {
+		if mailboxProvider == nil {
+			mailboxProvider = &messaging.DefaultMailboxProvider[EventData]{}
+		}
+		if notifier == nil {
+			panic("param 'notifier' is null")
+		}
+		ed.mailboxProvider = mailboxProvider
+		ed.notifier = notifier
+		ed.initialized = true
+	})
+	return ed
+}
+
 func (ed *DefaultEventDispatcher) Subscribe(eventTypeName string, handler EventHandler) {
+	if !ed.initialized {
+		panic("not initialized")
+	}
+
 	defer ed.locker.Unlock()
 	ed.locker.Lock()
 
@@ -41,47 +74,55 @@ func (ed *DefaultEventDispatcher) Subscribe(eventTypeName string, handler EventH
 	}
 
 	if ed.handlers == nil {
-		ed.handlers = map[string][]EventHandler{eventTypeName: {handler}}
+		ed.handlers = map[string][]messaging.MessageHandler[EventData]{eventTypeName: {messaging.MessageHandler[EventData](handler)}}
 	} else if existsHandlers, ok := ed.handlers[eventTypeName]; ok {
-		existsHandlers = append(existsHandlers, handler)
+		existsHandlers = append(existsHandlers, messaging.MessageHandler[EventData](handler))
 		ed.handlers[eventTypeName] = existsHandlers
 	} else {
-		ed.handlers[eventTypeName] = []EventHandler{handler}
+		ed.handlers[eventTypeName] = []messaging.MessageHandler[EventData]{messaging.MessageHandler[EventData](handler)}
 	}
 
 	proxiedHande := handler.Handle
 	for _, proxy := range ed.proxies {
 		proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
 	}
-	proxiedHandler := EventHandler{
+	proxiedHandler := messaging.MessageHandler[EventData]{
 		FuncName: handler.FuncName,
 		Handle:   proxiedHande,
 	}
 
 	if ed.proxiedHandlers == nil {
-		ed.proxiedHandlers = map[string][]EventHandler{eventTypeName: {proxiedHandler}}
+		ed.proxiedHandlers = map[string][]messaging.MessageHandler[EventData]{eventTypeName: {proxiedHandler}}
 	} else if existsProxiedHandlers, ok := ed.proxiedHandlers[eventTypeName]; ok {
 		existsProxiedHandlers = append(existsProxiedHandlers, proxiedHandler)
 		ed.proxiedHandlers[eventTypeName] = existsProxiedHandlers
 	} else {
-		ed.proxiedHandlers[eventTypeName] = []EventHandler{proxiedHandler}
+		ed.proxiedHandlers[eventTypeName] = []messaging.MessageHandler[EventData]{proxiedHandler}
 	}
 }
 
 func (ed *DefaultEventDispatcher) SubscribeMulti(handlerGroup EventHandlerGroup) {
+	if !ed.initialized {
+		panic("not initialized")
+	}
+
 	if handlerGroup != nil {
 		for eventTypeName, handler := range handlerGroup.Handlers() {
-			ed.Subscribe(eventTypeName, handler)
+			ed.Subscribe(eventTypeName, EventHandler(handler))
 		}
 	}
 }
 
 func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
+	if !ed.initialized {
+		panic("not initialized")
+	}
+
 	defer ed.locker.Unlock()
 	ed.locker.Lock()
 
 	if ed.proxies == nil {
-		ed.proxies = make([]EventHandlerProxy, 0)
+		ed.proxies = make([]messaging.MessageHandlerProxy[EventData], 0)
 	}
 	for _, proxy := range proxies {
 		if proxy == nil {
@@ -96,7 +137,7 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 			for _, proxy := range ed.proxies {
 				proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
 			}
-			proxiedHandler := EventHandler{
+			proxiedHandler := messaging.MessageHandler[EventData]{
 				FuncName: handler.FuncName,
 				Handle:   proxiedHande,
 			}
@@ -105,23 +146,54 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 	}
 }
 
-func (ed *DefaultEventDispatcher) Dispatch(data *EventData) {
-	mbp := ed.MailboxProvider
-	if mbp == nil {
-		mbp = &DefaultMailboxProvider{}
+func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
+	if !ed.initialized {
+		panic("not initialized")
 	}
 
-	mb := mbp.GetMailbox(data.EventSourceID, data.EventSourceTypeName, ed.proxiedHandlers)
-	resultCh := make(chan EventHandleResult, 1)
-	err := mb.Receive(data, resultCh)
-	for err != nil {
-		time.Sleep(time.Millisecond)
-		mb = mbp.GetMailbox(data.EventSourceID, data.EventSourceTypeName, ed.proxiedHandlers)
-		err = mb.Receive(data, resultCh)
+	if data == nil || len(data.Events) == 0 {
+		return
 	}
 
-	callback := ed.Callback
-	if callback != nil {
-		callback(*data, resultCh)
+	resultCh := make(chan messaging.MessageHandleResult, len(data.Events))
+	for _, event := range data.Events {
+		msg := messaging.MailWithResult[EventData]{
+			Mail: CreateEventMail(&EventData{
+				AggregateID:       data.AggregateID,
+				AggregateTypeName: data.AggregateTypeName,
+				StreamVersion:     data.StreamVersion,
+				Event:             event,
+			}),
+			ResultCh: resultCh,
+		}
+		mb := ed.mailboxProvider.GetMailbox(data.AggregateID, data.AggregateTypeName, ed.proxiedHandlers)
+		err := mb.SendMail(msg)
+		for err != nil {
+			time.Sleep(time.Millisecond)
+			mb = ed.mailboxProvider.GetMailbox(data.AggregateID, data.AggregateTypeName, ed.proxiedHandlers)
+			err = mb.SendMail(msg)
+		}
+	}
+
+	if ed.notifier != nil {
+		// notify event bus
+		goroutine.Go(context.Background(), func(ctx context.Context) {
+			logger := logging.Get(ctx)
+			var aggrErr error
+			for i := 0; i < cap(resultCh); i++ {
+				err := (<-resultCh).Err
+				if err != nil {
+					if aggrErr == nil {
+						aggrErr = err
+					} else {
+						aggrErr = errors.Join(err)
+					}
+				}
+			}
+			logger.Info(fmt.Sprintf("notify event handle result from %s", CommandHandleResultProvider),
+				slog.String("command-id", data.CommandID),
+			)
+			ed.notifier.Notify(data.CommandID, CommandHandleResultProvider, messaging.MessageHandleResult{Err: aggrErr})
+		})
 	}
 }
