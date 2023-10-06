@@ -21,6 +21,7 @@ type EventStreamData struct {
 	AggregateTypeName string            `json:"aggregate_type_name" bson:"aggregate_type_name"`
 	StreamVersion     int               `json:"stream_version" bson:"stream_version"`
 	Events            []DomainEventData `json:"events" bson:"events"`
+	CommandID         string            `json:"command_id" bson:"command_id"`
 }
 
 type EventStreamDataSlice []EventStreamData

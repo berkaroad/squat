@@ -10,11 +10,9 @@ Domain-Driven Design framework, event sourcing supported, base on EDA and CQRS.
 
   - Save `eventstream` to `eventstore`
 
-  - Publish `eventstream` to `eventbus`
+  - Publish `eventstream` to `eventpublisher`
 
   - Support taking snapshot for `aggregate` to `snapshotstore`
-
-  - Record published eventstream to `publishedstore` when published to eventbus success
 
 - EDA
 
@@ -22,8 +20,18 @@ Domain-Driven Design framework, event sourcing supported, base on EDA and CQRS.
 
   - Support user-customized `proxy` for event handler
 
-  - Support callback when event handled
+  - Support notify when command-id related eventstream handled
 
-  - Support parallel handling events by `event source id` or `event source type`
+  - Support parallel handling events by specific mailbox's name
 
-- CQRS (TODO)
+  - Record published eventstream to `publishedstore` when published to eventbus success
+
+- CQRS
+
+  Send command to command bus and returns two results: one is when command handled, the other is when command-id related eventstream handled.
+
+  - Support user-customized `proxy` for command handler
+
+  - Support notify when command handled
+
+  - Support parallel handling commands by specific mailbox's name
