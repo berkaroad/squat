@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	errMailboxDestoryed error = errors.New("S:MailboxDestoryed", "mailbox has been destoryed")
+	errMailboxDestoryed error = errors.NewWithCode("S:MailboxDestoryed", "mailbox has been destoryed")
 )
 
 type Mailbox[TMessageBody any] interface {

@@ -8,6 +8,6 @@ const (
 )
 
 var (
-	ErrNetworkError          error = errors.New(ErrCodeNetworkError, "network error")
-	ErrMissingMessageHandler error = errors.New(ErrCodeMissingMessageHandler, "missing message handler")
+	ErrNetworkError          error = errors.NewWithCode(ErrCodeNetworkError, "network error")
+	ErrMissingMessageHandler error = errors.NewWithCode(ErrCodeMissingMessageHandler, "missing message handler")
 )

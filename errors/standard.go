@@ -20,6 +20,14 @@ import (
 // wrapping this will be returned.
 var ErrUnsupported = errors.ErrUnsupported
 
+// New returns an error that formats as the given text.
+// Each call to New returns a distinct error value even if the text is identical.
+//
+// Deprecated: use NewWithCode(code string, text string) error instead
+//
+//go:linkname New errors.New
+func New(text string) error
+
 // Unwrap returns the result of calling the Unwrap method on err, if err's
 // type contains an Unwrap method returning error.
 // Otherwise, Unwrap returns nil.

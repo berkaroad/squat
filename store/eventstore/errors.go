@@ -8,6 +8,6 @@ const (
 )
 
 var (
-	ErrDuplicateKey      error = errors.New(ErrCodeDuplicateKey, "duplicate key error")
-	ErrUnexpectedVersion error = errors.New(ErrCodeUnexpectedVersion, "unexpected stream version")
+	ErrDuplicateKey      error = errors.NewWithCode(ErrCodeDuplicateKey, "duplicate key error")
+	ErrUnexpectedVersion error = errors.NewWithCode(ErrCodeUnexpectedVersion, "unexpected stream version")
 )
