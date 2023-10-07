@@ -1,8 +1,13 @@
 package messaging
 
-import "errors"
+import "github.com/berkaroad/squat/errors"
+
+const (
+	ErrCodeNetworkError          string = "S:NetworkError"
+	ErrCodeMissingMessageHandler string = "S:MissingMessageHandler"
+)
 
 var (
-	ErrNetworkError          error = errors.New("network error")
-	ErrMissingMessageHandler error = errors.New("missing message handler")
+	ErrNetworkError          error = errors.New(ErrCodeNetworkError, "network error")
+	ErrMissingMessageHandler error = errors.New(ErrCodeMissingMessageHandler, "missing message handler")
 )

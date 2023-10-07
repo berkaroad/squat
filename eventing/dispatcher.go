@@ -2,7 +2,6 @@ package eventing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/domain"
+	"github.com/berkaroad/squat/errors"
 	"github.com/berkaroad/squat/internal/goroutine"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"

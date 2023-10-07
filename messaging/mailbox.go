@@ -3,7 +3,6 @@ package messaging
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -11,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/berkaroad/squat/errors"
 	"github.com/berkaroad/squat/internal/goroutine"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/serialization"
@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	errMailboxDestoryed error = errors.New("mailbox has been destoryed")
+	errMailboxDestoryed error = errors.New("S:MailboxDestoryed", "mailbox has been destoryed")
 )
 
 type Mailbox[TMessageBody any] interface {
@@ -45,6 +45,7 @@ type MailWithResult[TMessage any] struct {
 type MessageHandleResult struct {
 	MessageCategory string
 	Err             error
+	Code            string
 }
 
 type MailBoxStatistic struct {
@@ -162,7 +163,7 @@ func (mb *defaultMailbox[TMessage]) SendMail(data MailWithResult[TMessage]) erro
 }
 
 func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
-	mb.logger.Info("mailbox initialized")
+	mb.logger.Debug("mailbox initialized")
 	goroutine.Go(context.Background(), func(ctx context.Context) {
 		autoReleaseTimeout := mb.autoReleaseTimeout
 		if autoReleaseTimeout <= 0 {
@@ -227,6 +228,7 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 					MessageCategory: messageMetadata.Category,
 				}
 				if handleErr != nil {
+					handleResult.Code = errors.GetErrorCode(handleErr)
 					handleResult.Err = fmt.Errorf("handle %s '%s(id=%s)' fail : %w", messageMetadata.Category, data.Mail.TypeName(), messageMetadata.ID, handleErr)
 				}
 				data.ResultCh <- handleResult
@@ -244,6 +246,6 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 			}
 		}
 		removeSelf(mb.name)
-		mb.logger.Info("mailbox removed")
+		mb.logger.Debug("mailbox removed")
 	})
 }

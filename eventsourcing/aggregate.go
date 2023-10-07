@@ -1,7 +1,7 @@
 package eventsourcing
 
 import (
-	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/berkaroad/squat/domain"
@@ -69,7 +69,7 @@ func (s *EventSourcedAggregateBase) Restore(snapshot AggregateSnapshot, restoreS
 
 	if snapshot != nil {
 		if snapshot.SnapshotVersion() < 1 {
-			return errors.New("param 'snapshot' is invalid: 'SnapshotVersion' must greater than or equal to 1")
+			return fmt.Errorf("%w: 'SnapshotVersion' must greater than or equal to 1", ErrInvalidSnapshot)
 		}
 		if err := restoreSnapshot(snapshot); err != nil {
 			return err
@@ -80,7 +80,7 @@ func (s *EventSourcedAggregateBase) Restore(snapshot AggregateSnapshot, restoreS
 	if len(eventStreams) > 0 {
 		sort.Sort(eventStreams)
 		if eventStreams[0].StreamVersion < 1 {
-			return errors.New("param 'eventStreams' is invalid: 'streamversion' must greater than or equal to 1")
+			return fmt.Errorf("%w: 'streamversion' must greater than or equal to 1", ErrInvalidEventStream)
 		}
 	}
 

@@ -2,7 +2,6 @@ package eventsourcing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -16,13 +15,6 @@ import (
 	"github.com/berkaroad/squat/serialization"
 	"github.com/berkaroad/squat/store/eventstore"
 	"github.com/berkaroad/squat/store/snapshotstore"
-)
-
-var (
-	ErrGetSnapshotFail          error = errors.New("get snapshot fail")
-	ErrSaveSnapshotFail         error = errors.New("save snapshot fail")
-	ErrQueryEventStreamListFail error = errors.New("query eventstream list fail")
-	ErrAppendEventStreamFail    error = errors.New("append eventstream fail")
 )
 
 var _ domain.Repository[EventSourcedAggregate] = (*EventSourcedRepositoryBase[EventSourcedAggregate])(nil)

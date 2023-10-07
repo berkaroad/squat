@@ -1,8 +1,13 @@
 package eventstore
 
-import "errors"
+import "github.com/berkaroad/squat/errors"
+
+const (
+	ErrCodeDuplicateKey      string = "S:DuplicateKey"
+	ErrCodeUnexpectedVersion string = "S:UnexpectedVersion"
+)
 
 var (
-	ErrDuplicateKey      error = errors.New("duplicate key error")
-	ErrUnexpectedVersion error = errors.New("unexpected stream version")
+	ErrDuplicateKey      error = errors.New(ErrCodeDuplicateKey, "duplicate key error")
+	ErrUnexpectedVersion error = errors.New(ErrCodeUnexpectedVersion, "unexpected stream version")
 )

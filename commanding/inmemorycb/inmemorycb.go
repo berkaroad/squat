@@ -1,7 +1,6 @@
 package inmemorycb
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,10 +49,6 @@ func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher
 func (cb *InMemoryCommandBus) Send(cmd commanding.Command) (<-chan messaging.MessageHandleResult, error) {
 	if !cb.initialized {
 		panic("not initialized")
-	}
-
-	if cb.status.Load() != 1 {
-		return nil, errors.New("command processor has stopped")
 	}
 
 	resultCh := make(chan messaging.MessageHandleResult, 2)

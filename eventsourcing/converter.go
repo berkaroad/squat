@@ -14,7 +14,7 @@ func ToAggregateSnapshot(serializer serialization.Serializer, asd snapshotstore.
 	}
 	snapshot, ok := snapshotObj.(AggregateSnapshot)
 	if !ok {
-		return nil, fmt.Errorf("cann't cast '%#v' to 'AggregateSnapshot'", snapshotObj)
+		return nil, fmt.Errorf("couldn't cast '%#v' to 'AggregateSnapshot'", snapshotObj)
 	}
 	return snapshot, nil
 }
