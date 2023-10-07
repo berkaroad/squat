@@ -12,10 +12,10 @@ const (
 )
 
 var (
-	ErrInvalidSnapshot          error = errors.New(ErrCodeGetSnapshotFail, "invalid snapshot")
-	ErrInvalidEventStream       error = errors.New(ErrCodeGetSnapshotFail, "invalid eventstream")
-	ErrGetSnapshotFail          error = errors.New(ErrCodeGetSnapshotFail, "get snapshot fail")
-	ErrSaveSnapshotFail         error = errors.New(ErrCodeSaveSnapshotFail, "save snapshot fail")
-	ErrQueryEventStreamListFail error = errors.New(ErrCodeQueryEventStreamListFail, "query eventstream list fail")
-	ErrAppendEventStreamFail    error = errors.New(ErrCodeAppendEventStreamFail, "append eventstream fail")
+	ErrInvalidSnapshot          error = errors.NewWithCode(ErrCodeGetSnapshotFail, "invalid snapshot")
+	ErrInvalidEventStream       error = errors.NewWithCode(ErrCodeGetSnapshotFail, "invalid eventstream")
+	ErrGetSnapshotFail          error = errors.NewWithCode(ErrCodeGetSnapshotFail, "get snapshot fail")
+	ErrSaveSnapshotFail         error = errors.NewWithCode(ErrCodeSaveSnapshotFail, "save snapshot fail")
+	ErrQueryEventStreamListFail error = errors.NewWithCode(ErrCodeQueryEventStreamListFail, "query eventstream list fail")
+	ErrAppendEventStreamFail    error = errors.NewWithCode(ErrCodeAppendEventStreamFail, "append eventstream fail")
 )

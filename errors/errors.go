@@ -1,6 +1,6 @@
 package errors
 
-func New(code string, text string) error {
+func NewWithCode(code string, text string) error {
 	return &errorStringWithCode{text: text, code: code}
 }
 
