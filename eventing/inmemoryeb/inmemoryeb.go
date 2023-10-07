@@ -1,7 +1,6 @@
 package inmemoryeb
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,10 +43,6 @@ func (eb *InMemoryEventBus) Initialize(dispatcher eventing.EventDispatcher) *InM
 func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
 	if !eb.initialized {
 		panic("not initialized")
-	}
-
-	if eb.status.Load() != 1 {
-		return errors.New("event processor has stopped")
 	}
 
 	eb.receiverCh <- &es

@@ -2,7 +2,6 @@ package publishedstore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -55,7 +54,7 @@ func (ps *DefaultBatchSavingPublishedStore) GetPublishedVersion(ctx context.Cont
 	}
 
 	if ps.status.Load() != 1 {
-		return 0, errors.New("batch saving published store has stopped")
+		panic("batch saving published store has stopped")
 	}
 
 	if val, ok := ps.publishedVersionCache.Load(aggregateID); ok {
@@ -71,7 +70,7 @@ func (ps *DefaultBatchSavingPublishedStore) Save(ctx context.Context, data Publi
 	}
 
 	if ps.status.Load() != 1 {
-		return errors.New("batch saving published store has stopped")
+		panic("batch saving published store has stopped")
 	}
 
 	ps.receiverCh <- data
