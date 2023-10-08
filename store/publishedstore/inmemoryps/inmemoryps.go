@@ -28,11 +28,13 @@ func (s *InMemoryPublishedStore) GetPublishedVersion(ctx context.Context, aggreg
 	}
 }
 
-func (s *InMemoryPublishedStore) Save(ctx context.Context, data publishedstore.PublishedEventStreamRef) error {
-	actual, loaded := s.store.LoadOrStore(data.AggregateID, &data)
-	if loaded {
-		exists := actual.(*publishedstore.PublishedEventStreamRef)
-		exists.PublishedVersion = data.PublishedVersion
+func (s *InMemoryPublishedStore) Save(ctx context.Context, datas []publishedstore.PublishedEventStreamRef) error {
+	for _, data := range datas {
+		actual, loaded := s.store.LoadOrStore(data.AggregateID, &data)
+		if loaded {
+			exists := actual.(*publishedstore.PublishedEventStreamRef)
+			exists.PublishedVersion = data.PublishedVersion
+		}
 	}
 	return nil
 }

@@ -5,6 +5,8 @@ import (
 	"github.com/berkaroad/squat/messaging"
 )
 
+const MailCategory string = "event"
+
 type EventBus interface {
 	Publish(es domain.EventStream) error
 }
@@ -50,7 +52,7 @@ func (m *eventMail) Metadata() messaging.MessageMetadata {
 		ID:                m.DomainEvent.EventID(),
 		AggregateID:       m.eventData.AggregateID,
 		AggregateTypeName: m.eventData.AggregateTypeName,
-		Category:          "event",
+		Category:          MailCategory,
 	}
 }
 

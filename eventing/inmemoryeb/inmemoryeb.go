@@ -20,6 +20,7 @@ var _ eventing.EventBus = (*InMemoryEventBus)(nil)
 var _ eventing.EventProcessor = (*InMemoryEventBus)(nil)
 
 type InMemoryEventBus struct {
+	BufferSize int
 	dispatcher eventing.EventDispatcher
 
 	initOnce    sync.Once
@@ -33,8 +34,12 @@ func (eb *InMemoryEventBus) Initialize(dispatcher eventing.EventDispatcher) *InM
 		if dispatcher == nil {
 			dispatcher = &eventing.DefaultEventDispatcher{}
 		}
+		bufferSize := eb.BufferSize
+		if bufferSize <= 0 {
+			bufferSize = 1000
+		}
 		eb.dispatcher = dispatcher
-		eb.receiverCh = make(chan *domain.EventStream, 1)
+		eb.receiverCh = make(chan *domain.EventStream, bufferSize)
 		eb.initialized = true
 	})
 	return eb

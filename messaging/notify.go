@@ -1,9 +1,14 @@
 package messaging
 
 type MessageHandleResultNotifier[TMessage any] interface {
-	Notify(messageID string, resultProvider string, data MessageHandleResult)
+	Notify(messageID string, resultProvider string, result MessageHandleResult)
 }
 
-type MessageHandleResultSubscriber[TMessage any] interface {
-	Subscribe(messageID string, resultProvider string, resultCh chan<- MessageHandleResult)
+type MessageHandleResultWatcher[TMessage any] interface {
+	Watch(messageID string, resultProvider string) MessageHandleResultWatchItem
+}
+
+type MessageHandleResultWatchItem interface {
+	Result() <-chan MessageHandleResult
+	Unwatch()
 }

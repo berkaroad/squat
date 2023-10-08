@@ -40,16 +40,18 @@ func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregate
 	return eventStreamDatas, nil
 }
 
-func (s *InMemoryEventStore) AppendEventStream(ctx context.Context, data eventstore.EventStreamData) error {
-	eventStreamDatas := make(eventstore.EventStreamDataSlice, 0)
-	eventstreamDatasObj, ok := s.eventstreamMapper.Load(data.AggregateID)
-	if ok {
-		eventStreamDatas = eventstreamDatasObj.(eventstore.EventStreamDataSlice)
+func (s *InMemoryEventStore) AppendEventStream(ctx context.Context, datas eventstore.EventStreamDataSlice) error {
+	for _, data := range datas {
+		eventStreamDatas := make(eventstore.EventStreamDataSlice, 0)
+		eventstreamDatasObj, ok := s.eventstreamMapper.Load(data.AggregateID)
+		if ok {
+			eventStreamDatas = eventstreamDatasObj.(eventstore.EventStreamDataSlice)
+		}
+		if len(eventStreamDatas)+1 != data.StreamVersion {
+			return fmt.Errorf("%w: expected is %d, actual is %d", eventstore.ErrUnexpectedVersion, len(eventStreamDatas)+1, data.StreamVersion)
+		}
+		eventStreamDatas = append(eventStreamDatas, data)
+		s.eventstreamMapper.Store(data.AggregateID, eventStreamDatas)
 	}
-	if len(eventStreamDatas)+1 != data.StreamVersion {
-		return fmt.Errorf("%w: expected is %d, actual is %d", eventstore.ErrUnexpectedVersion, len(eventStreamDatas)+1, data.StreamVersion)
-	}
-	eventStreamDatas = append(eventStreamDatas, data)
-	s.eventstreamMapper.Store(data.AggregateID, eventStreamDatas)
 	return nil
 }

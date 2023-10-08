@@ -6,7 +6,7 @@ import (
 
 type PublishedStore interface {
 	GetPublishedVersion(ctx context.Context, aggregateID string) (int, error)
-	Save(ctx context.Context, data PublishedEventStreamRef) error
+	Save(ctx context.Context, datas []PublishedEventStreamRef) error
 }
 
 type PublishedEventStreamRef struct {

@@ -6,7 +6,7 @@ import (
 
 type EventStore interface {
 	QueryEventStreamList(ctx context.Context, aggregateID string, startVersion, endVersion int) (EventStreamDataSlice, error)
-	AppendEventStream(ctx context.Context, data EventStreamData) error
+	AppendEventStream(ctx context.Context, datas EventStreamDataSlice) error
 }
 
 type DomainEventData struct {

@@ -146,8 +146,8 @@ func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
 	}
 
 	resultCh := make(chan messaging.MessageHandleResult, 1)
-	msg := messaging.MailWithResult[Command]{
-		Mail:     CreateCommandMail(data),
+	msg := messaging.MailsWithResult[Command]{
+		Mails:    []messaging.Mail[Command]{CreateCommandMail(data)},
 		ResultCh: resultCh,
 	}
 	mb := cd.mailboxProvider.GetMailbox(data.AggregateID(), data.AggregateTypeName(), cd.proxiedHandlers)

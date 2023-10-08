@@ -22,6 +22,7 @@ var _ AggregateSnapshoter[EventSourcedAggregate] = (*EventSourcedRepositoryBase[
 
 type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
 	es         eventstore.EventStore
+	ess        eventstore.EventStoreSaver
 	ss         snapshotstore.SnapshotStore
 	ep         eventing.EventPublisher
 	serializer serialization.Serializer
@@ -33,6 +34,7 @@ type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
 
 func (r *EventSourcedRepositoryBase[T]) Initialize(
 	eventStore eventstore.EventStore,
+	eventStoreSaver eventstore.EventStoreSaver,
 	snapshotStore snapshotstore.SnapshotStore,
 	eventPublisher eventing.EventPublisher,
 	serializer serialization.Serializer,
@@ -55,6 +57,7 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 		}
 
 		r.es = eventStore
+		r.ess = eventStoreSaver
 		r.ss = snapshotStore
 		r.ep = eventPublisher
 		r.serializer = serializer
@@ -130,10 +133,14 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 		panic("not initialized")
 	}
 	if len(aggregate.Changes()) == 0 {
-		return nil
+		return ErrAggregateNoChange
 	}
 
 	logger := logging.Get(ctx)
+	if aggregate.AggregateID() == "" {
+		return ErrEmptyAggregateID
+	}
+
 	eventStream := domain.EventStream{
 		AggregateID:       aggregate.AggregateID(),
 		AggregateTypeName: aggregate.AggregateTypeName(),
@@ -149,7 +156,11 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 		)
 		return err
 	}
-	err = r.es.AppendEventStream(ctx, eventStreamData)
+	if r.ess != nil {
+		err = <-r.ess.AppendEventStream(ctx, eventStreamData)
+	} else {
+		err = r.es.AppendEventStream(ctx, eventstore.EventStreamDataSlice{eventStreamData})
+	}
 	if err != nil {
 		err = fmt.Errorf("%w: %v", ErrAppendEventStreamFail, err)
 		logger.Error(err.Error(),

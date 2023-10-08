@@ -2,7 +2,6 @@ package messaging
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -23,7 +22,7 @@ var (
 
 type Mailbox[TMessageBody any] interface {
 	Name() string
-	SendMail(data MailWithResult[TMessageBody]) error
+	SendMail(data MailsWithResult[TMessageBody]) error
 }
 
 type MailboxProvider[TMessageBody any] interface {
@@ -37,8 +36,8 @@ type Mail[TMessage any] interface {
 	Unwrap() TMessage
 }
 
-type MailWithResult[TMessage any] struct {
-	Mail     Mail[TMessage]
+type MailsWithResult[TMessage any] struct {
+	Mails    []Mail[TMessage]
 	ResultCh chan MessageHandleResult
 }
 
@@ -73,11 +72,15 @@ func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggreg
 	if p.GetMailboxName != nil {
 		mailboxName = p.GetMailboxName(aggregateID, aggregateTypeName)
 	}
+	mailboxCapacity := p.MailboxCapacity
+	if mailboxCapacity <= 0 {
+		mailboxCapacity = 1000
+	}
 
 	actual, loaded := p.mailboxes.LoadOrStore(mailboxName, &defaultMailbox[TMessage]{
 		name:               mailboxName,
 		autoReleaseTimeout: p.AutoReleaseTimeout,
-		receiverCh:         make(chan MailWithResult[TMessage], p.MailboxCapacity),
+		receiverCh:         make(chan MailsWithResult[TMessage], mailboxCapacity),
 		handlers:           handlers,
 		logger: slog.Default().With(
 			slog.String("mailbox", mailboxName),
@@ -93,7 +96,7 @@ func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggreg
 		actual, loaded = p.mailboxes.LoadOrStore(mailboxName, &defaultMailbox[TMessage]{
 			name:               mailboxName,
 			autoReleaseTimeout: p.AutoReleaseTimeout,
-			receiverCh:         make(chan MailWithResult[TMessage], p.MailboxCapacity),
+			receiverCh:         make(chan MailsWithResult[TMessage], mailboxCapacity),
 			handlers:           handlers,
 			logger: slog.Default().With(
 				slog.String("mailbox", mailboxName),
@@ -132,7 +135,7 @@ var _ Mailbox[any] = (*defaultMailbox[any])(nil)
 type defaultMailbox[TMessage any] struct {
 	name               string
 	autoReleaseTimeout time.Duration
-	receiverCh         chan MailWithResult[TMessage]
+	receiverCh         chan MailsWithResult[TMessage]
 	handlers           map[string][]MessageHandler[TMessage]
 	logger             *slog.Logger
 
@@ -143,7 +146,7 @@ func (mb *defaultMailbox[TMessage]) Name() string {
 	return mb.name
 }
 
-func (mb *defaultMailbox[TMessage]) SendMail(data MailWithResult[TMessage]) error {
+func (mb *defaultMailbox[TMessage]) SendMail(data MailsWithResult[TMessage]) error {
 	mb.status.CompareAndSwap(statusActived, statusActivating)
 	mb.status.CompareAndSwap(statusDisactived, statusActivating)
 	if mb.status.Load() == statusDestoryed {
@@ -152,13 +155,6 @@ func (mb *defaultMailbox[TMessage]) SendMail(data MailWithResult[TMessage]) erro
 	}
 	mb.receiverCh <- data
 	mb.status.CompareAndSwap(statusActivating, statusActived)
-	if mb.logger.Enabled(context.Background(), slog.LevelDebug) {
-		dataBytes, _ := json.Marshal(data.Mail.Unwrap())
-		mb.logger.Debug(fmt.Sprintf("receive %s", data.Mail.Metadata().Category),
-			slog.Any("message-id", data.Mail.Metadata().ID),
-			slog.Any("message-body", dataBytes),
-		)
-	}
 	return nil
 }
 
@@ -167,7 +163,7 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 	goroutine.Go(context.Background(), func(ctx context.Context) {
 		autoReleaseTimeout := mb.autoReleaseTimeout
 		if autoReleaseTimeout <= 0 {
-			autoReleaseTimeout = time.Second * 30
+			autoReleaseTimeout = time.Second * 10
 		}
 
 		allHandlers := mb.handlers
@@ -175,61 +171,76 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 		for {
 			select {
 			case data := <-mb.receiverCh:
-				messageMetadata := data.Mail.Metadata()
-				messageID := messageMetadata.ID
-				messageTypeName := data.Mail.TypeName()
-				aggregateID := messageMetadata.AggregateID
-				aggregateTypeName := messageMetadata.AggregateTypeName
-				logger := mb.logger.With(
-					slog.String("message-id", messageID),
-					slog.String("message-type", messageTypeName),
-					slog.String("aggregate-id", aggregateID),
-					slog.String("aggregate-type", aggregateTypeName),
-				)
-				handleCtx := NewContext(logging.NewContext(context.Background(), logger), messageMetadata)
+				if len(data.Mails) == 0 {
+					data.ResultCh <- MessageHandleResult{}
+					continue
+				}
+				var handlerErrs error
+				for _, mail := range data.Mails {
+					messageMetadata := mail.Metadata()
+					messageID := messageMetadata.ID
+					messageTypeName := mail.TypeName()
+					aggregateID := messageMetadata.AggregateID
+					aggregateTypeName := messageMetadata.AggregateTypeName
+					logger := mb.logger.With(
+						slog.String("message-id", messageID),
+						slog.String("message-type", messageTypeName),
+						slog.String("aggregate-id", aggregateID),
+						slog.String("aggregate-type", aggregateTypeName),
+					)
+					handleCtx := NewContext(logging.NewContext(context.Background(), logger), messageMetadata)
 
-				var handleErr error
-				var noHandler bool
-				if handlers, ok := allHandlers[messageTypeName]; ok {
-					if len(handlers) == 0 {
+					var handleErr error
+					var noHandler bool
+					if handlers, ok := allHandlers[messageTypeName]; ok {
+						if len(handlers) == 0 {
+							noHandler = true
+						}
+						for _, handler := range handlers {
+							err := retrying.Retry(func() (err error) {
+								defer func() {
+									if r := recover(); r != nil {
+										err = fmt.Errorf("%v", r)
+									}
+								}()
+								err = handler.Handle(handleCtx, mail.Unwrap())
+								return
+							}, time.Second*3, func(retryCount int, err error) bool {
+								if _, ok := err.(net.Error); ok {
+									return true
+								}
+								return false
+							}, -1)
+							if err == nil {
+								logger.Debug(fmt.Sprintf("handle %s success", messageMetadata.Category),
+									slog.String(fmt.Sprintf("%s-handler", messageMetadata.Category), handler.FuncName),
+								)
+							} else {
+								handleErr = errors.Join(err)
+							}
+						}
+					} else {
 						noHandler = true
 					}
-					for _, handler := range handlers {
-						err := retrying.Retry(func() (err error) {
-							defer func() {
-								if r := recover(); r != nil {
-									err = fmt.Errorf("%v", r)
-								}
-							}()
-							err = handler.Handle(handleCtx, data.Mail.Unwrap())
-							return
-						}, time.Second*3, func(retryCount int, err error) bool {
-							if _, ok := err.(net.Error); ok || errors.Is(err, ErrNetworkError) {
-								return true
-							}
-							return false
-						}, -1)
-						if err == nil {
-							logger.Debug(fmt.Sprintf("handle %s success", messageMetadata.Category),
-								slog.String(fmt.Sprintf("%s-handler", messageMetadata.Category), handler.FuncName),
-							)
+					if noHandler {
+						handleErr = ErrMissingMessageHandler
+						logger.Warn(fmt.Sprintf("no %s handler", messageMetadata.Category))
+					}
+					if handleErr != nil {
+						if handlerErrs == nil {
+							handlerErrs = handleErr
 						} else {
-							handleErr = errors.Join(err)
+							handlerErrs = errors.Join(handleErr)
 						}
 					}
-				} else {
-					noHandler = true
 				}
-				if noHandler {
-					handleErr = ErrMissingMessageHandler
-					logger.Warn(fmt.Sprintf("no %s handler", messageMetadata.Category))
-				}
+
 				handleResult := MessageHandleResult{
-					MessageCategory: messageMetadata.Category,
+					MessageCategory: data.Mails[0].Metadata().Category,
 				}
-				if handleErr != nil {
-					handleResult.Code = errors.GetErrorCode(handleErr)
-					handleResult.Err = fmt.Errorf("handle %s '%s(id=%s)' fail : %w", messageMetadata.Category, data.Mail.TypeName(), messageMetadata.ID, handleErr)
+				if handlerErrs != nil {
+					handleResult.Code = errors.GetErrorCode(handlerErrs)
+					handleResult.Err = handlerErrs
 				}
 				data.ResultCh <- handleResult
 			case <-time.After(autoReleaseTimeout):

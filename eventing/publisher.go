@@ -28,9 +28,11 @@ type EventPublisher interface {
 var _ EventPublisher = (*DefaultEventPublisher)(nil)
 
 type DefaultEventPublisher struct {
+	BufferSize int
 	eb         EventBus
 	es         eventstore.EventStore
 	ps         publishedstore.PublishedStore
+	pss        publishedstore.PublishedStoreSaver
 	serializer serialization.Serializer
 
 	initOnce    sync.Once
@@ -42,16 +44,31 @@ type DefaultEventPublisher struct {
 func (ep *DefaultEventPublisher) Initialize(
 	eventBus EventBus,
 	eventStore eventstore.EventStore,
-	publishedStore publishedstore.BatchSavingPublishedStore,
+	publishedStore publishedstore.PublishedStore,
+	publishedStoreSaver publishedstore.PublishedStoreSaver,
 	serializer serialization.Serializer,
 ) *DefaultEventPublisher {
 	ep.initOnce.Do(func() {
+		if eventBus == nil {
+			panic("field 'eventBus' is null")
+		}
+		if eventStore == nil {
+			panic("field 'eventStore' is null")
+		}
+		if publishedStore == nil {
+			panic("field 'publishedStore' is null")
+		}
+		bufferSize := ep.BufferSize
+		if bufferSize <= 0 {
+			bufferSize = 1000
+		}
 		ep.eb = eventBus
 		ep.es = eventStore
 		ep.ps = publishedStore
+		ep.pss = publishedStoreSaver
 		ep.serializer = serializer
 
-		ep.receiverCh = make(chan domain.EventStream, 1)
+		ep.receiverCh = make(chan domain.EventStream, bufferSize)
 		ep.initialized = true
 	})
 	return ep
@@ -68,15 +85,13 @@ func (ep *DefaultEventPublisher) Start() {
 			eventBus := ep.eb
 			eventStore := ep.es
 			publishedStore := ep.ps
+			publishedStoreSaver := ep.pss
 			serializer := ep.serializer
 
+		loop:
 			for {
 				select {
 				case eventStream := <-ep.receiverCh:
-					if eventStream.AggregateID == "" {
-						baseLogger.Error("aggregate-id of from eventstream is empty")
-						continue
-					}
 					logger := baseLogger.With(
 						slog.String("aggregate-id", eventStream.AggregateID),
 						slog.String("aggregate-type", eventStream.AggregateTypeName),
@@ -160,11 +175,19 @@ func (ep *DefaultEventPublisher) Start() {
 						}
 
 						retrying.RetryForever(func() error {
-							return publishedStore.Save(bgCtx2, publishedstore.PublishedEventStreamRef{
-								AggregateID:       eventStream.AggregateID,
-								AggregateTypeName: eventStream.AggregateTypeName,
-								PublishedVersion:  publishedVersion,
-							})
+							if publishedStoreSaver != nil {
+								return publishedStoreSaver.Save(bgCtx2, publishedstore.PublishedEventStreamRef{
+									AggregateID:       eventStream.AggregateID,
+									AggregateTypeName: eventStream.AggregateTypeName,
+									PublishedVersion:  publishedVersion,
+								})
+							} else {
+								return publishedStore.Save(bgCtx2, []publishedstore.PublishedEventStreamRef{{
+									AggregateID:       eventStream.AggregateID,
+									AggregateTypeName: eventStream.AggregateTypeName,
+									PublishedVersion:  publishedVersion,
+								}})
+							}
 						}, time.Second, func(retryCount int, err error) bool {
 							if retryCount == 0 {
 								unpublishedLogger.Error(fmt.Sprintf("save published eventstream fail: %v", err),
@@ -187,11 +210,19 @@ func (ep *DefaultEventPublisher) Start() {
 						publishedVersion = eventStream.StreamVersion
 
 						retrying.RetryForever(func() error {
-							return publishedStore.Save(bgCtx, publishedstore.PublishedEventStreamRef{
-								AggregateID:       eventStream.AggregateID,
-								AggregateTypeName: eventStream.AggregateTypeName,
-								PublishedVersion:  publishedVersion,
-							})
+							if publishedStoreSaver != nil {
+								return publishedStoreSaver.Save(bgCtx, publishedstore.PublishedEventStreamRef{
+									AggregateID:       eventStream.AggregateID,
+									AggregateTypeName: eventStream.AggregateTypeName,
+									PublishedVersion:  publishedVersion,
+								})
+							} else {
+								return publishedStore.Save(bgCtx, []publishedstore.PublishedEventStreamRef{{
+									AggregateID:       eventStream.AggregateID,
+									AggregateTypeName: eventStream.AggregateTypeName,
+									PublishedVersion:  publishedVersion,
+								}})
+							}
 						}, time.Second, func(retryCount int, err error) bool {
 							if retryCount == 0 {
 								logger.Error(fmt.Sprintf("save published eventstream fail: %v", err),
@@ -202,6 +233,9 @@ func (ep *DefaultEventPublisher) Start() {
 						})
 					}
 				case <-time.After(time.Second):
+					if ep.status.Load() != 1 {
+						break loop
+					}
 				}
 			}
 		}()

@@ -21,8 +21,9 @@ var _ commanding.CommandBus = (*InMemoryCommandBus)(nil)
 var _ commanding.CommandProcess = (*InMemoryCommandBus)(nil)
 
 type InMemoryCommandBus struct {
-	dispatcher commanding.CommandDispatcher
-	subscriber messaging.MessageHandleResultSubscriber[commanding.Command]
+	BufferSize    int
+	dispatcher    commanding.CommandDispatcher
+	resultWatcher messaging.MessageHandleResultWatcher[commanding.Command]
 
 	initOnce    sync.Once
 	initialized bool
@@ -30,30 +31,45 @@ type InMemoryCommandBus struct {
 	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
 }
 
-func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher, subscriber messaging.MessageHandleResultSubscriber[commanding.Command]) *InMemoryCommandBus {
+func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher, resultWatcher messaging.MessageHandleResultWatcher[commanding.Command]) *InMemoryCommandBus {
 	cb.initOnce.Do(func() {
 		if dispatcher == nil {
 			dispatcher = &commanding.DefaultCommandDispatcher{}
 		}
-		if subscriber == nil {
-			panic("param 'subscriber' is null")
+		if resultWatcher == nil {
+			panic("param 'resultWatcher' is null")
+		}
+		bufferSize := cb.BufferSize
+		if bufferSize <= 0 {
+			bufferSize = 1000
 		}
 		cb.dispatcher = dispatcher
-		cb.subscriber = subscriber
-		cb.receiverCh = make(chan commanding.Command, 1)
+		cb.resultWatcher = resultWatcher
+		cb.receiverCh = make(chan commanding.Command, bufferSize)
 		cb.initialized = true
 	})
 	return cb
 }
 
-func (cb *InMemoryCommandBus) Send(cmd commanding.Command) (<-chan messaging.MessageHandleResult, error) {
+func (cb *InMemoryCommandBus) Send(cmd commanding.Command) (<-chan commanding.CommandHandleResult, error) {
 	if !cb.initialized {
 		panic("not initialized")
 	}
 
-	resultCh := make(chan messaging.MessageHandleResult, 2)
-	cb.subscriber.Subscribe(cmd.CommandID(), commanding.CommandHandleResultProvider, resultCh)
-	cb.subscriber.Subscribe(cmd.CommandID(), eventing.CommandHandleResultProvider, resultCh)
+	resultCh := make(chan commanding.CommandHandleResult, 1)
+	commandHandleResultWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
+	eventHandleResultWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
+	go func() {
+		result := commanding.CommandHandleResult{
+			FromCommandHandle: <-commandHandleResultWatchItem.Result(),
+		}
+		if result.FromCommandHandle.Err == nil {
+			result.FromEventHandleCh = eventHandleResultWatchItem.Result()
+		} else {
+			eventHandleResultWatchItem.Unwatch()
+		}
+		resultCh <- result
+	}()
 	cb.receiverCh <- cmd
 	return resultCh, nil
 }

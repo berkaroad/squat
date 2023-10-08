@@ -5,8 +5,10 @@ import (
 	"github.com/berkaroad/squat/serialization"
 )
 
+const MailCategory string = "command"
+
 type CommandBus interface {
-	Send(cmd Command) (<-chan messaging.MessageHandleResult, error)
+	Send(cmd Command) (<-chan CommandHandleResult, error)
 }
 
 type CommandProcess interface {
@@ -59,6 +61,11 @@ type CommandHandlerGroup interface {
 
 type CommandHandlerProxy messaging.MessageHandlerProxy[Command]
 
+type CommandHandleResult struct {
+	FromCommandHandle messaging.MessageHandleResult
+	FromEventHandleCh <-chan messaging.MessageHandleResult
+}
+
 func CreateCommandMail(cmd Command) messaging.Mail[Command] {
 	return &commandMail{
 		Command: cmd,
@@ -76,7 +83,7 @@ func (m *commandMail) Metadata() messaging.MessageMetadata {
 		ID:                m.Command.CommandID(),
 		AggregateID:       m.Command.AggregateID(),
 		AggregateTypeName: m.Command.AggregateTypeName(),
-		Category:          "command",
+		Category:          MailCategory,
 	}
 }
 
