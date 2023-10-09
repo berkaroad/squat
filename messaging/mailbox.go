@@ -37,6 +37,7 @@ type Mail[TMessage any] interface {
 }
 
 type MailsWithResult[TMessage any] struct {
+	Category string
 	Mails    []Mail[TMessage]
 	ResultCh chan MessageHandleResult
 }
@@ -212,8 +213,8 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 								return false
 							}, -1)
 							if err == nil {
-								logger.Debug(fmt.Sprintf("handle %s success", messageMetadata.Category),
-									slog.String(fmt.Sprintf("%s-handler", messageMetadata.Category), handler.FuncName),
+								logger.Debug(fmt.Sprintf("handle %s success", data.Category),
+									slog.String(fmt.Sprintf("%s-handler", data.Category), handler.FuncName),
 								)
 							} else {
 								handleErr = errors.Join(err)
@@ -224,7 +225,7 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 					}
 					if noHandler {
 						handleErr = ErrMissingMessageHandler
-						logger.Warn(fmt.Sprintf("no %s handler", messageMetadata.Category))
+						logger.Warn(fmt.Sprintf("no %s handler", data.Category))
 					}
 					if handleErr != nil {
 						if handlerErrs == nil {
@@ -236,7 +237,7 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 				}
 
 				handleResult := MessageHandleResult{
-					MessageCategory: data.Mails[0].Metadata().Category,
+					MessageCategory: data.Category,
 				}
 				if handlerErrs != nil {
 					handleResult.Code = errors.GetErrorCode(handlerErrs)

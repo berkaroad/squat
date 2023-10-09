@@ -52,7 +52,6 @@ func (m *eventMail) Metadata() messaging.MessageMetadata {
 		ID:                m.DomainEvent.EventID(),
 		AggregateID:       m.eventData.AggregateID,
 		AggregateTypeName: m.eventData.AggregateTypeName,
-		Category:          MailCategory,
 	}
 }
 

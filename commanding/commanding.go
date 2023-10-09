@@ -99,7 +99,6 @@ func (m *commandMail) Metadata() messaging.MessageMetadata {
 		ID:                m.Command.CommandID(),
 		AggregateID:       m.Command.AggregateID(),
 		AggregateTypeName: m.Command.AggregateTypeName(),
-		Category:          MailCategory,
 	}
 }
 

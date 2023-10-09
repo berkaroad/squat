@@ -147,6 +147,7 @@ func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
 
 	resultCh := make(chan messaging.MessageHandleResult, 1)
 	msg := messaging.MailsWithResult[Command]{
+		Category: MailCategory,
 		Mails:    []messaging.Mail[Command]{CreateCommandMail(data)},
 		ResultCh: resultCh,
 	}

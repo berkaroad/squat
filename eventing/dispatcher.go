@@ -156,6 +156,7 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 
 	resultCh := make(chan messaging.MessageHandleResult, 1)
 	mail := messaging.MailsWithResult[EventData]{
+		Category: MailCategory,
 		Mails:    make([]messaging.Mail[EventData], len(data.Events)),
 		ResultCh: resultCh,
 	}

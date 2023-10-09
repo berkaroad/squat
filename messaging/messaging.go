@@ -20,5 +20,4 @@ type MessageMetadata struct {
 	ID                string
 	AggregateID       string
 	AggregateTypeName string
-	Category          string
 }
