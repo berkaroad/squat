@@ -8,7 +8,7 @@ import (
 const MailCategory string = "command"
 
 type CommandBus interface {
-	Send(cmd Command) (<-chan CommandHandleResult, error)
+	Send(cmd Command) (*CommandHandleResult, error)
 }
 
 type CommandProcess interface {
@@ -62,8 +62,24 @@ type CommandHandlerGroup interface {
 type CommandHandlerProxy messaging.MessageHandlerProxy[Command]
 
 type CommandHandleResult struct {
-	FromCommandHandle messaging.MessageHandleResult
-	FromEventHandleCh <-chan messaging.MessageHandleResult
+	FromCommandWatchItem messaging.MessageHandleResultWatchItem
+	FromEventWatchItem   messaging.MessageHandleResultWatchItem
+}
+
+func (chr *CommandHandleResult) FromCommandHandle() <-chan messaging.MessageHandleResult {
+	return chr.FromCommandWatchItem.Result()
+}
+
+func (chr *CommandHandleResult) FromEventHandle() <-chan messaging.MessageHandleResult {
+	fromCommand := <-chr.FromCommandWatchItem.Result()
+	if fromCommand.Err == nil {
+		return chr.FromEventWatchItem.Result()
+	} else {
+		chr.FromEventWatchItem.Unwatch()
+		resultCh := make(chan messaging.MessageHandleResult, 1)
+		resultCh <- fromCommand
+		return resultCh
+	}
 }
 
 func CreateCommandMail(cmd Command) messaging.Mail[Command] {

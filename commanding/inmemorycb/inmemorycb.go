@@ -51,27 +51,18 @@ func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher
 	return cb
 }
 
-func (cb *InMemoryCommandBus) Send(cmd commanding.Command) (<-chan commanding.CommandHandleResult, error) {
+func (cb *InMemoryCommandBus) Send(cmd commanding.Command) (*commanding.CommandHandleResult, error) {
 	if !cb.initialized {
 		panic("not initialized")
 	}
 
-	resultCh := make(chan commanding.CommandHandleResult, 1)
 	commandHandleResultWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
 	eventHandleResultWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
-	go func() {
-		result := commanding.CommandHandleResult{
-			FromCommandHandle: <-commandHandleResultWatchItem.Result(),
-		}
-		if result.FromCommandHandle.Err == nil {
-			result.FromEventHandleCh = eventHandleResultWatchItem.Result()
-		} else {
-			eventHandleResultWatchItem.Unwatch()
-		}
-		resultCh <- result
-	}()
 	cb.receiverCh <- cmd
-	return resultCh, nil
+	return &commanding.CommandHandleResult{
+		FromCommandWatchItem: commandHandleResultWatchItem,
+		FromEventWatchItem:   eventHandleResultWatchItem,
+	}, nil
 }
 
 func (cb *InMemoryCommandBus) Start() {
