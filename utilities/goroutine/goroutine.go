@@ -4,8 +4,8 @@ import (
 	_ "unsafe"
 )
 
-//go:linkname Wait github.com/berkaroad/squat/internal/goroutine.wait
+//go:linkname Wait github.com/berkaroad/squat/internal/counter.wait
 func Wait() <-chan struct{}
 
-//go:linkname Count github.com/berkaroad/squat/internal/goroutine.count
+//go:linkname Count github.com/berkaroad/squat/internal/counter.count
 func Count() int64

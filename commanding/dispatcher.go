@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/berkaroad/squat/internal/goroutine"
+	"github.com/berkaroad/squat/internal/counter"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 )
@@ -145,6 +145,9 @@ func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
 		panic("not initialized")
 	}
 
+	counter.Begin()
+	defer counter.End()
+
 	resultCh := make(chan messaging.MessageHandleResult, 1)
 	msg := messaging.MailsWithResult[Command]{
 		Category: MailCategory,
@@ -161,13 +164,13 @@ func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
 
 	if cd.notifier != nil {
 		// notify event bus
-		goroutine.Go(context.Background(), func(ctx context.Context) {
-			logger := logging.Get(ctx)
+		go func() {
+			logger := logging.Get(context.Background())
 			result := <-resultCh
 			logger.Info(fmt.Sprintf("notify command handle result from %s", CommandHandleResultProvider),
 				slog.String("command-id", data.CommandID()),
 			)
 			cd.notifier.Notify(data.CommandID(), CommandHandleResultProvider, result)
-		})
+		}()
 	}
 }

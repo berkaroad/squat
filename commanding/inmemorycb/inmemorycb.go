@@ -93,7 +93,7 @@ func (cb *InMemoryCommandBus) Stop() {
 	}
 
 	cb.status.CompareAndSwap(1, 2)
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second)
 	for len(cb.receiverCh) > 0 {
 		time.Sleep(time.Second)
 	}

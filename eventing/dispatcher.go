@@ -11,7 +11,7 @@ import (
 
 	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/domain"
-	"github.com/berkaroad/squat/internal/goroutine"
+	"github.com/berkaroad/squat/internal/counter"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 )
@@ -150,9 +150,8 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 		panic("not initialized")
 	}
 
-	if data == nil || len(data.Events) == 0 {
-		return
-	}
+	counter.Begin()
+	defer counter.End()
 
 	resultCh := make(chan messaging.MessageHandleResult, 1)
 	mail := messaging.MailsWithResult[EventData]{
@@ -178,13 +177,13 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 
 	if ed.notifier != nil {
 		// notify event bus
-		goroutine.Go(context.Background(), func(ctx context.Context) {
-			logger := logging.Get(ctx)
+		go func() {
+			logger := logging.Get(context.Background())
 			result := <-resultCh
 			logger.Info(fmt.Sprintf("notify event handle result from %s", CommandHandleResultProvider),
 				slog.String("command-id", data.CommandID),
 			)
 			ed.notifier.Notify(data.CommandID, CommandHandleResultProvider, result)
-		})
+		}()
 	}
 }

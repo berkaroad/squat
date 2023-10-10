@@ -248,7 +248,7 @@ func (ep *DefaultEventPublisher) Stop() {
 	}
 
 	ep.status.CompareAndSwap(1, 2)
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second)
 	for len(ep.receiverCh) > 0 {
 		time.Sleep(time.Second)
 	}

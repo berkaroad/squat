@@ -1,19 +1,18 @@
-package goroutine
+package counter
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 )
 
 var counter atomic.Int64
 
-func Go(ctx context.Context, action func(ctx context.Context)) {
+func Begin() {
 	counter.Add(1)
-	go func() {
-		defer counter.Add(-1)
-		action(ctx)
-	}()
+}
+
+func End() {
+	counter.Add(-1)
 }
 
 func wait() <-chan struct{} {

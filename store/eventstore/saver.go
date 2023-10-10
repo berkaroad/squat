@@ -102,7 +102,7 @@ func (saver *DefaultEventStoreSaver) Stop() {
 	}
 
 	saver.status.CompareAndSwap(1, 2)
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second)
 	for len(saver.receiverCh) > 0 {
 		time.Sleep(time.Second)
 	}
