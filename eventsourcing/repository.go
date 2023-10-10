@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/berkaroad/squat/domain"
-	"github.com/berkaroad/squat/eventing"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 	"github.com/berkaroad/squat/serialization"
@@ -18,13 +17,13 @@ import (
 )
 
 var _ domain.Repository[EventSourcedAggregate] = (*EventSourcedRepositoryBase[EventSourcedAggregate])(nil)
-var _ AggregateSnapshoter[EventSourcedAggregate] = (*EventSourcedRepositoryBase[EventSourcedAggregate])(nil)
 
 type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
 	es         eventstore.EventStore
 	ess        eventstore.EventStoreSaver
 	ss         snapshotstore.SnapshotStore
-	ep         eventing.EventPublisher
+	sss        snapshotstore.SnapshotStoreSaver
+	ep         EventPublisher
 	serializer serialization.Serializer
 
 	initOnce            sync.Once
@@ -36,7 +35,8 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 	eventStore eventstore.EventStore,
 	eventStoreSaver eventstore.EventStoreSaver,
 	snapshotStore snapshotstore.SnapshotStore,
-	eventPublisher eventing.EventPublisher,
+	snapshotStoreSaver snapshotstore.SnapshotStoreSaver,
+	eventPublisher EventPublisher,
 	serializer serialization.Serializer,
 ) *EventSourcedRepositoryBase[T] {
 	r.initOnce.Do(func() {
@@ -59,6 +59,7 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 		r.es = eventStore
 		r.ess = eventStoreSaver
 		r.ss = snapshotStore
+		r.sss = snapshotStoreSaver
 		r.ep = eventPublisher
 		r.serializer = serializer
 
@@ -110,7 +111,7 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 
 	eventStreams := make(domain.EventStreamSlice, 0)
 	for _, eventStreamData := range eventStreamDatas {
-		eventStream, err := eventstore.ToEventStream(r.serializer, eventStreamData)
+		eventStream, err := ToEventStream(r.serializer, eventStreamData)
 		if err != nil {
 			logger.Error(err.Error(),
 				slog.String("aggregate-id", eventStreamData.AggregateID),
@@ -148,7 +149,7 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 		Events:            aggregate.Changes(),
 		CommandID:         messaging.FromContext(ctx).ID,
 	}
-	eventStreamData, err := eventstore.ToEventStreamData(r.serializer, eventStream)
+	eventStreamData, err := ToEventStreamData(r.serializer, eventStream)
 	if err != nil {
 		logger.Error(err.Error(),
 			slog.String("aggregate-id", eventStream.AggregateID),
@@ -171,104 +172,14 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 	}
 	aggregate.AcceptChanges()
 	r.ep.Publish(ctx, eventStream)
-	return nil
-}
 
-func (r *EventSourcedRepositoryBase[T]) TaskSnapshot(ctx context.Context, aggregateID string) error {
-	if !r.initialized {
-		panic("not initialized")
-	}
-	if r.ss == nil {
-		return nil
-	}
-
-	logger := logging.Get(ctx)
-	aggregate, err := r.Get(ctx, aggregateID)
-	if err != nil {
-		return err
-	}
-	if reflect.ValueOf(aggregate).IsNil() {
-		return nil
-	}
-
-	snapshot := aggregate.Snapshot()
-	snapshotData, err := ToAggregateSnapshotData(r.serializer, snapshot)
-	if err != nil {
-		logger.Error(err.Error(),
-			slog.String("aggregate-id", snapshot.AggregateID()),
-			slog.Int("snapshot-version", snapshot.SnapshotVersion()),
-		)
-		return err
-	}
-	err = r.ss.SaveSnapshot(ctx, snapshotData)
-	if err != nil {
-		err = fmt.Errorf("%w: %v", ErrSaveSnapshotFail, err)
-		logger.Error(err.Error(),
-			slog.String("aggregate-id", snapshotData.AggregateID),
-			slog.Int("snapshot-version", snapshotData.SnapshotVersion),
-		)
-		return err
+	// save snapshot
+	if r.sss != nil {
+		snapshotData, err := ToAggregateSnapshotData(r.serializer, aggregate.Snapshot())
+		if err != nil {
+			return err
+		}
+		r.sss.SaveSnapshot(ctx, snapshotData)
 	}
 	return nil
-}
-
-func (r *EventSourcedRepositoryBase[T]) GetSnapshot(ctx context.Context, aggregateID string, endVersion int) (T, error) {
-	if !r.initialized {
-		panic("not initialized")
-	}
-
-	logger := logging.Get(ctx)
-	var snapshot AggregateSnapshot
-	var startVersion int
-	if r.ss != nil {
-		snapshotData, err := r.ss.GetSnapshot(ctx, aggregateID)
-		if err != nil {
-			logger.Warn(fmt.Sprintf("get snapshot fail: %v", err),
-				slog.String("aggregate-id", aggregateID),
-			)
-		} else if snapshotData.AggregateID != "" && snapshotData.SnapshotVersion > 0 && snapshotData.SnapshotVersion <= endVersion {
-			snapshot, err = ToAggregateSnapshot(r.serializer, snapshotData)
-			if err != nil {
-				logger.Warn(err.Error(),
-					slog.String("aggregate-id", snapshotData.AggregateID),
-					slog.Int("snapshot-version", snapshotData.SnapshotVersion),
-				)
-			} else {
-				startVersion = snapshotData.SnapshotVersion
-			}
-		}
-	}
-
-	var aggregate T
-	eventStreams := make(domain.EventStreamSlice, 0)
-	if startVersion < endVersion {
-		eventStreamDatas, err := r.es.QueryEventStreamList(ctx, aggregateID, startVersion+1, endVersion)
-		if err != nil {
-			err = fmt.Errorf("%w: %v", ErrQueryEventStreamListFail, err)
-			logger.Error(err.Error(),
-				slog.String("aggregate-id", aggregateID),
-				slog.Int("start-version", startVersion+1),
-				slog.Int("end-version", endVersion),
-			)
-			return aggregate, err
-		}
-
-		for _, eventStreamData := range eventStreamDatas {
-			eventStream, err := eventstore.ToEventStream(r.serializer, eventStreamData)
-			if err != nil {
-				logger.Error(err.Error(),
-					slog.String("aggregate-id", eventStream.AggregateID),
-					slog.Int("stream-version", eventStream.StreamVersion),
-				)
-				return aggregate, err
-			}
-			eventStreams = append(eventStreams, eventStream)
-		}
-	}
-
-	if snapshot != nil || len(eventStreams) > 0 {
-		aggregate = reflect.New(r.aggregateStructType).Interface().(T)
-		aggregate.Restore(snapshot, eventStreams)
-	}
-	return aggregate, nil
 }

@@ -4,7 +4,7 @@ import "context"
 
 type SnapshotStore interface {
 	GetSnapshot(ctx context.Context, aggregateID string) (AggregateSnapshotData, error)
-	SaveSnapshot(ctx context.Context, data AggregateSnapshotData) error
+	SaveSnapshot(ctx context.Context, datas []AggregateSnapshotData) error
 }
 
 type AggregateSnapshotData struct {

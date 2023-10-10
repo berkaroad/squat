@@ -1,4 +1,4 @@
-package publishedstore
+package snapshotstore
 
 import (
 	"context"
@@ -13,54 +13,55 @@ import (
 	"github.com/berkaroad/squat/utilities/retrying"
 )
 
-type PublishedStoreSaver interface {
-	SavePublished(ctx context.Context, data PublishedEventStreamRef)
+type SnapshotStoreSaver interface {
+	SaveSnapshot(ctx context.Context, data AggregateSnapshotData)
 	Start()
 	Stop()
 }
 
-var _ PublishedStoreSaver = (*DefaultPublishedStoreSaver)(nil)
+var _ SnapshotStoreSaver = (*DefaultSnapshotStoreSaver)(nil)
 
-type DefaultPublishedStoreSaver struct {
-	BatchSize     int
-	BatchInterval time.Duration
-	ps            PublishedStore
+type DefaultSnapshotStoreSaver struct {
+	TakeSnapshotMinVersion int
+	BatchSize              int
+	BatchInterval          time.Duration
+	ss                     SnapshotStore
 
 	initOnce    sync.Once
 	initialized bool
-	receiverCh  chan *PublishedEventStreamRef
+	receiverCh  chan *AggregateSnapshotData
 	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
 }
 
-func (saver *DefaultPublishedStoreSaver) Initialize(publishedStore PublishedStore) *DefaultPublishedStoreSaver {
+func (saver *DefaultSnapshotStoreSaver) Initialize(snapshotStore SnapshotStore) *DefaultSnapshotStoreSaver {
 	saver.initOnce.Do(func() {
-		if publishedStore == nil {
-			panic("param 'publishedStore' is null")
+		if snapshotStore == nil {
+			panic("param 'snapshotStore' is null")
 		}
 		batchSize := saver.BatchSize
 		if batchSize <= 0 {
 			batchSize = 100
 		}
-		saver.ps = publishedStore
-		saver.receiverCh = make(chan *PublishedEventStreamRef, batchSize)
+		saver.ss = snapshotStore
+		saver.receiverCh = make(chan *AggregateSnapshotData, batchSize)
 		saver.initialized = true
 	})
 	return saver
 }
 
-func (saver *DefaultPublishedStoreSaver) SavePublished(ctx context.Context, data PublishedEventStreamRef) {
+func (saver *DefaultSnapshotStoreSaver) SaveSnapshot(ctx context.Context, data AggregateSnapshotData) {
 	if !saver.initialized {
 		panic("not initialized")
 	}
 
 	if saver.status.Load() != 1 {
-		panic("batch saving published store has stopped")
+		panic("batch saving snapshot store has stopped")
 	}
 
 	saver.receiverCh <- &data
 }
 
-func (saver *DefaultPublishedStoreSaver) Start() {
+func (saver *DefaultSnapshotStoreSaver) Start() {
 	if !saver.initialized {
 		panic("not initialized")
 	}
@@ -72,24 +73,31 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 			if batchInterval <= 0 {
 				batchInterval = time.Second * 3
 			}
-			store := saver.ps
-			datas := make(map[string]*PublishedEventStreamRef)
+			takeSnapshotMinVersion := saver.TakeSnapshotMinVersion
+			if takeSnapshotMinVersion <= 0 {
+				takeSnapshotMinVersion = 10
+			}
+			store := saver.ss
+			datas := make(map[string]*AggregateSnapshotData)
 			bgCtx := context.Background()
 		loop:
 			for {
 				select {
 				case data := <-saver.receiverCh:
-					if exists, ok := datas[data.AggregateID]; !ok || exists.PublishedVersion < data.PublishedVersion {
+					if data.SnapshotVersion < takeSnapshotMinVersion {
+						continue
+					}
+					if exists, ok := datas[data.AggregateID]; !ok || exists.SnapshotVersion < data.SnapshotVersion {
 						datas[data.AggregateID] = data
 					}
 					if len(datas) >= batchSize {
 						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]*PublishedEventStreamRef)
+						datas = make(map[string]*AggregateSnapshotData)
 					}
 				case <-time.After(batchInterval):
 					if len(datas) > 0 {
 						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]*PublishedEventStreamRef)
+						datas = make(map[string]*AggregateSnapshotData)
 					} else if saver.status.Load() != 1 {
 						break loop
 					}
@@ -99,7 +107,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 	}
 }
 
-func (saver *DefaultPublishedStoreSaver) Stop() {
+func (saver *DefaultSnapshotStoreSaver) Stop() {
 	if !saver.initialized {
 		panic("not initialized")
 	}
@@ -113,14 +121,14 @@ func (saver *DefaultPublishedStoreSaver) Stop() {
 	saver.status.CompareAndSwap(2, 0)
 }
 
-func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store PublishedStore, dataMapping map[string]*PublishedEventStreamRef) {
-	datas := make([]PublishedEventStreamRef, 0, len(dataMapping))
+func (saver *DefaultSnapshotStoreSaver) batchSave(ctx context.Context, store SnapshotStore, dataMapping map[string]*AggregateSnapshotData) {
+	datas := make([]AggregateSnapshotData, 0, len(dataMapping))
 	logger := logging.Get(ctx)
 	for _, data := range dataMapping {
 		datas = append(datas, *data)
 	}
 	err := retrying.Retry(func() error {
-		return store.SavePublished(ctx, datas)
+		return store.SaveSnapshot(ctx, datas)
 	}, time.Second, func(retryCount int, err error) bool {
 		if _, ok := err.(net.Error); ok {
 			return true
@@ -128,6 +136,6 @@ func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store Pu
 		return false
 	}, -1)
 	if err != nil {
-		logger.Error(fmt.Sprintf("batch save published eventstream fail: %v", err))
+		logger.Error(fmt.Sprintf("batch save snapshot eventstream fail: %v", err))
 	}
 }

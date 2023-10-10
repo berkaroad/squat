@@ -28,7 +28,7 @@ func (s *InMemoryPublishedStore) GetPublishedVersion(ctx context.Context, aggreg
 	}
 }
 
-func (s *InMemoryPublishedStore) Save(ctx context.Context, datas []publishedstore.PublishedEventStreamRef) error {
+func (s *InMemoryPublishedStore) SavePublished(ctx context.Context, datas []publishedstore.PublishedEventStreamRef) error {
 	for _, data := range datas {
 		actual, loaded := s.store.LoadOrStore(data.AggregateID, &data)
 		if loaded {

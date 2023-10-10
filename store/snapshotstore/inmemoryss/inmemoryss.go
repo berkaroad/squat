@@ -29,7 +29,9 @@ func (s *InMemorySnapshotStore) GetSnapshot(ctx context.Context, aggregateID str
 	return snapshotData, nil
 }
 
-func (s *InMemorySnapshotStore) SaveSnapshot(ctx context.Context, data snapshotstore.AggregateSnapshotData) error {
-	s.snapshotMapper.Store(data.AggregateID, data)
+func (s *InMemorySnapshotStore) SaveSnapshot(ctx context.Context, datas []snapshotstore.AggregateSnapshotData) error {
+	for _, data := range datas {
+		s.snapshotMapper.Store(data.AggregateID, data)
+	}
 	return nil
 }

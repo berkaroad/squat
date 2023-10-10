@@ -1,4 +1,4 @@
-package eventing
+package eventsourcing
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/berkaroad/squat/domain"
+	"github.com/berkaroad/squat/eventing"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/serialization"
 	"github.com/berkaroad/squat/store/eventstore"
@@ -29,7 +30,7 @@ var _ EventPublisher = (*DefaultEventPublisher)(nil)
 
 type DefaultEventPublisher struct {
 	BufferSize int
-	eb         EventBus
+	eb         eventing.EventBus
 	es         eventstore.EventStore
 	ps         publishedstore.PublishedStore
 	pss        publishedstore.PublishedStoreSaver
@@ -42,7 +43,7 @@ type DefaultEventPublisher struct {
 }
 
 func (ep *DefaultEventPublisher) Initialize(
-	eventBus EventBus,
+	eventBus eventing.EventBus,
 	eventStore eventstore.EventStore,
 	publishedStore publishedstore.PublishedStore,
 	publishedStoreSaver publishedstore.PublishedStoreSaver,
@@ -122,7 +123,7 @@ func (ep *DefaultEventPublisher) Start() {
 						})
 
 						var err error
-						unpublishedEventStreams, err = eventstore.ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
+						unpublishedEventStreams, err = ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
 						if err != nil {
 							dataBytes, _ := json.Marshal(unpublishedEventStreamDatas)
 							logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
@@ -144,7 +145,7 @@ func (ep *DefaultEventPublisher) Start() {
 						})
 
 						var err error
-						unpublishedEventStreams, err = eventstore.ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
+						unpublishedEventStreams, err = ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
 						if err != nil {
 							dataBytes, _ := json.Marshal(unpublishedEventStreamDatas)
 							logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
@@ -176,13 +177,14 @@ func (ep *DefaultEventPublisher) Start() {
 
 						retrying.RetryForever(func() error {
 							if publishedStoreSaver != nil {
-								return publishedStoreSaver.Save(bgCtx2, publishedstore.PublishedEventStreamRef{
+								publishedStoreSaver.SavePublished(bgCtx2, publishedstore.PublishedEventStreamRef{
 									AggregateID:       eventStream.AggregateID,
 									AggregateTypeName: eventStream.AggregateTypeName,
 									PublishedVersion:  publishedVersion,
 								})
+								return nil
 							} else {
-								return publishedStore.Save(bgCtx2, []publishedstore.PublishedEventStreamRef{{
+								return publishedStore.SavePublished(bgCtx2, []publishedstore.PublishedEventStreamRef{{
 									AggregateID:       eventStream.AggregateID,
 									AggregateTypeName: eventStream.AggregateTypeName,
 									PublishedVersion:  publishedVersion,
@@ -211,13 +213,14 @@ func (ep *DefaultEventPublisher) Start() {
 
 						retrying.RetryForever(func() error {
 							if publishedStoreSaver != nil {
-								return publishedStoreSaver.Save(bgCtx, publishedstore.PublishedEventStreamRef{
+								publishedStoreSaver.SavePublished(bgCtx, publishedstore.PublishedEventStreamRef{
 									AggregateID:       eventStream.AggregateID,
 									AggregateTypeName: eventStream.AggregateTypeName,
 									PublishedVersion:  publishedVersion,
 								})
+								return nil
 							} else {
-								return publishedStore.Save(bgCtx, []publishedstore.PublishedEventStreamRef{{
+								return publishedStore.SavePublished(bgCtx, []publishedstore.PublishedEventStreamRef{{
 									AggregateID:       eventStream.AggregateID,
 									AggregateTypeName: eventStream.AggregateTypeName,
 									PublishedVersion:  publishedVersion,
