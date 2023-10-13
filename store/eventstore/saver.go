@@ -3,6 +3,7 @@ package eventstore
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -20,9 +21,10 @@ type EventStoreSaver interface {
 }
 
 type DefaultEventStoreSaver struct {
-	BatchSize     int
-	BatchInterval time.Duration
-	es            EventStore
+	BatchSize         int
+	BatchInterval     time.Duration
+	ShardingAlgorithm func(aggregateID string) uint8
+	es                EventStore
 
 	initOnce    sync.Once
 	initialized bool
@@ -62,32 +64,45 @@ func (saver *DefaultEventStoreSaver) Start() {
 
 	if saver.status.CompareAndSwap(0, 1) {
 		go func() {
-			batchSize := saver.BatchSize
+			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
 				batchInterval = time.Millisecond * 100
 			}
+			shardingAlgorithm := saver.ShardingAlgorithm
+			if shardingAlgorithm == nil {
+				shardingAlgorithm = func(aggregateID string) uint8 { return 0 }
+			}
 			store := saver.es
-			datas := make(map[string]eventStreamDataWithResult)
+			shardingMapping := make(map[uint8]map[string]eventStreamDataWithResult)
 			bgCtx := context.Background()
 		loop:
 			for {
 				select {
 				case data := <-saver.receiverCh:
-					if _, ok := datas[data.Data.AggregateID]; !ok {
-						datas[data.Data.AggregateID] = data
+					shardKey := shardingAlgorithm(data.Data.AggregateID)
+					if _, ok := shardingMapping[shardKey]; !ok {
+						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
+					}
+					if _, ok := shardingMapping[shardKey][data.Data.AggregateID]; !ok {
+						shardingMapping[shardKey][data.Data.AggregateID] = data
 					} else {
 						data.ResultCh <- ErrEventStreamConcurrencyConflict
 					}
-					if len(datas) >= batchSize {
-						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]eventStreamDataWithResult)
+					if len(shardingMapping[shardKey]) >= batchSize {
+						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
+						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
 					}
 				case <-time.After(batchInterval):
-					if len(datas) > 0 {
-						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]eventStreamDataWithResult)
-					} else if saver.status.Load() != 1 {
+					hasData := false
+					for shardKey, datas := range shardingMapping {
+						if len(datas) > 0 {
+							hasData = true
+							saver.batchSave(bgCtx, store, shardKey, datas)
+							shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
+						}
+					}
+					if !hasData && saver.status.Load() != 1 {
 						break loop
 					}
 				}
@@ -110,7 +125,7 @@ func (saver *DefaultEventStoreSaver) Stop() {
 	saver.status.CompareAndSwap(2, 0)
 }
 
-func (saver *DefaultEventStoreSaver) batchSave(ctx context.Context, store EventStore, dataMapping map[string]eventStreamDataWithResult) {
+func (saver *DefaultEventStoreSaver) batchSave(ctx context.Context, store EventStore, shardKey uint8, dataMapping map[string]eventStreamDataWithResult) {
 	datas := make([]EventStreamData, 0, len(dataMapping))
 	logger := logging.Get(ctx)
 	for _, data := range dataMapping {
@@ -125,7 +140,15 @@ func (saver *DefaultEventStoreSaver) batchSave(ctx context.Context, store EventS
 		return false
 	}, -1)
 	if err != nil {
-		logger.Error(fmt.Sprintf("batch save eventstream fail: %v", err))
+		logger.Error(fmt.Sprintf("batch save to eventstore fail: %v", err),
+			slog.Uint64("shard-key", uint64(shardKey)),
+			slog.Uint64("data-count", uint64(len(dataMapping))),
+		)
+	} else {
+		logger.Info("batch save to eventstore success",
+			slog.Uint64("shard-key", uint64(shardKey)),
+			slog.Uint64("data-count", uint64(len(dataMapping))),
+		)
 	}
 	for _, data := range dataMapping {
 		data.ResultCh <- err

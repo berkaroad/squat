@@ -3,6 +3,7 @@ package publishedstore
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -22,9 +23,10 @@ type PublishedStoreSaver interface {
 var _ PublishedStoreSaver = (*DefaultPublishedStoreSaver)(nil)
 
 type DefaultPublishedStoreSaver struct {
-	BatchSize     int
-	BatchInterval time.Duration
-	ps            PublishedStore
+	BatchSize         int
+	BatchInterval     time.Duration
+	ShardingAlgorithm func(aggregateID string) uint8
+	ps                PublishedStore
 
 	initOnce    sync.Once
 	initialized bool
@@ -67,30 +69,42 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 
 	if saver.status.CompareAndSwap(0, 1) {
 		go func() {
-			batchSize := saver.BatchSize
+			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
 				batchInterval = time.Second * 3
 			}
+			shardingAlgorithm := saver.ShardingAlgorithm
+			if shardingAlgorithm == nil {
+				shardingAlgorithm = func(aggregateID string) uint8 { return 0 }
+			}
 			store := saver.ps
-			datas := make(map[string]*PublishedEventStreamRef)
+			shardingMapping := make(map[uint8]map[string]*PublishedEventStreamRef)
 			bgCtx := context.Background()
 		loop:
 			for {
 				select {
 				case data := <-saver.receiverCh:
-					if exists, ok := datas[data.AggregateID]; !ok || exists.PublishedVersion < data.PublishedVersion {
-						datas[data.AggregateID] = data
+					shardKey := shardingAlgorithm(data.AggregateID)
+					if _, ok := shardingMapping[shardKey]; !ok {
+						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
 					}
-					if len(datas) >= batchSize {
-						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]*PublishedEventStreamRef)
+					if exists, ok := shardingMapping[shardKey][data.AggregateID]; !ok || exists.PublishedVersion < data.PublishedVersion {
+						shardingMapping[shardKey][data.AggregateID] = data
+					}
+					if len(shardingMapping[shardKey]) >= batchSize {
+						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
+						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
 					}
 				case <-time.After(batchInterval):
-					if len(datas) > 0 {
-						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]*PublishedEventStreamRef)
-					} else if saver.status.Load() != 1 {
+					hasData := false
+					for shardKey, datas := range shardingMapping {
+						if len(datas) > 0 {
+							saver.batchSave(bgCtx, store, shardKey, datas)
+							shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
+						}
+					}
+					if !hasData && saver.status.Load() != 1 {
 						break loop
 					}
 				}
@@ -113,7 +127,7 @@ func (saver *DefaultPublishedStoreSaver) Stop() {
 	saver.status.CompareAndSwap(2, 0)
 }
 
-func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store PublishedStore, dataMapping map[string]*PublishedEventStreamRef) {
+func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store PublishedStore, shardKey uint8, dataMapping map[string]*PublishedEventStreamRef) {
 	datas := make([]PublishedEventStreamRef, 0, len(dataMapping))
 	logger := logging.Get(ctx)
 	for _, data := range dataMapping {
@@ -128,6 +142,14 @@ func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store Pu
 		return false
 	}, -1)
 	if err != nil {
-		logger.Error(fmt.Sprintf("batch save published eventstream fail: %v", err))
+		logger.Error(fmt.Sprintf("batch save to publishedstore fail: %v", err),
+			slog.Uint64("shard-key", uint64(shardKey)),
+			slog.Uint64("data-count", uint64(len(dataMapping))),
+		)
+	} else {
+		logger.Info("batch save to publishedstore success",
+			slog.Uint64("shard-key", uint64(shardKey)),
+			slog.Uint64("data-count", uint64(len(dataMapping))),
+		)
 	}
 }

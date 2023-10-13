@@ -3,6 +3,7 @@ package snapshotstore
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,7 @@ type DefaultSnapshotStoreSaver struct {
 	TakeSnapshotMinVersion int
 	BatchSize              int
 	BatchInterval          time.Duration
+	ShardingAlgorithm      func(aggregateID string) uint8
 	ss                     SnapshotStore
 
 	initOnce    sync.Once
@@ -68,17 +70,21 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 
 	if saver.status.CompareAndSwap(0, 1) {
 		go func() {
-			batchSize := saver.BatchSize
-			batchInterval := saver.BatchInterval
-			if batchInterval <= 0 {
-				batchInterval = time.Second * 3
-			}
 			takeSnapshotMinVersion := saver.TakeSnapshotMinVersion
 			if takeSnapshotMinVersion <= 0 {
 				takeSnapshotMinVersion = 10
 			}
+			batchSize := cap(saver.receiverCh)
+			batchInterval := saver.BatchInterval
+			if batchInterval <= 0 {
+				batchInterval = time.Second * 3
+			}
+			shardingAlgorithm := saver.ShardingAlgorithm
+			if shardingAlgorithm == nil {
+				shardingAlgorithm = func(aggregateID string) uint8 { return 0 }
+			}
 			store := saver.ss
-			datas := make(map[string]*AggregateSnapshotData)
+			shardingMapping := make(map[uint8]map[string]*AggregateSnapshotData)
 			bgCtx := context.Background()
 		loop:
 			for {
@@ -87,18 +93,26 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 					if data.SnapshotVersion < takeSnapshotMinVersion {
 						continue
 					}
-					if exists, ok := datas[data.AggregateID]; !ok || exists.SnapshotVersion < data.SnapshotVersion {
-						datas[data.AggregateID] = data
+					shardKey := shardingAlgorithm(data.AggregateID)
+					if _, ok := shardingMapping[shardKey]; !ok {
+						shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
 					}
-					if len(datas) >= batchSize {
-						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]*AggregateSnapshotData)
+					if exists, ok := shardingMapping[shardKey][data.AggregateID]; !ok || exists.SnapshotVersion < data.SnapshotVersion {
+						shardingMapping[shardKey][data.AggregateID] = data
+					}
+					if len(shardingMapping[shardKey]) >= batchSize {
+						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
+						shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
 					}
 				case <-time.After(batchInterval):
-					if len(datas) > 0 {
-						saver.batchSave(bgCtx, store, datas)
-						datas = make(map[string]*AggregateSnapshotData)
-					} else if saver.status.Load() != 1 {
+					hasData := false
+					for shardKey, datas := range shardingMapping {
+						if len(datas) > 0 {
+							saver.batchSave(bgCtx, store, shardKey, datas)
+							shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
+						}
+					}
+					if !hasData && saver.status.Load() != 1 {
 						break loop
 					}
 				}
@@ -121,7 +135,7 @@ func (saver *DefaultSnapshotStoreSaver) Stop() {
 	saver.status.CompareAndSwap(2, 0)
 }
 
-func (saver *DefaultSnapshotStoreSaver) batchSave(ctx context.Context, store SnapshotStore, dataMapping map[string]*AggregateSnapshotData) {
+func (saver *DefaultSnapshotStoreSaver) batchSave(ctx context.Context, store SnapshotStore, shardKey uint8, dataMapping map[string]*AggregateSnapshotData) {
 	datas := make([]AggregateSnapshotData, 0, len(dataMapping))
 	logger := logging.Get(ctx)
 	for _, data := range dataMapping {
@@ -136,6 +150,14 @@ func (saver *DefaultSnapshotStoreSaver) batchSave(ctx context.Context, store Sna
 		return false
 	}, -1)
 	if err != nil {
-		logger.Error(fmt.Sprintf("batch save snapshot eventstream fail: %v", err))
+		logger.Error(fmt.Sprintf("batch save to snapshotstore fail: %v", err),
+			slog.Uint64("shard-key", uint64(shardKey)),
+			slog.Uint64("data-count", uint64(len(dataMapping))),
+		)
+	} else {
+		logger.Info("batch save to snapshotstore success",
+			slog.Uint64("shard-key", uint64(shardKey)),
+			slog.Uint64("data-count", uint64(len(dataMapping))),
+		)
 	}
 }
