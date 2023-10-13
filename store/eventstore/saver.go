@@ -148,19 +148,19 @@ func (saver *DefaultEventStoreSaver) batchSave(ctx context.Context, store EventS
 		}
 		return false
 	}, -1)
+	for _, data := range dataMapping {
+		data.ResultCh <- err
+	}
 	if err != nil {
 		logger.Error(fmt.Sprintf("batch save to eventstore fail: %v", err),
 			slog.Uint64("shard-key", uint64(shardKey)),
 			slog.Uint64("data-count", uint64(len(dataMapping))),
 		)
 	} else {
-		logger.Info("batch save to eventstore success",
+		logger.Debug("batch save to eventstore success",
 			slog.Uint64("shard-key", uint64(shardKey)),
 			slog.Uint64("data-count", uint64(len(dataMapping))),
 		)
-	}
-	for _, data := range dataMapping {
-		data.ResultCh <- err
 	}
 }
 

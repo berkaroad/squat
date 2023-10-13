@@ -180,10 +180,13 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 		go func() {
 			logger := logging.Get(context.Background())
 			result := <-resultCh
+			ed.notifier.Notify(data.CommandID, CommandHandleResultProvider, result)
 			logger.Info(fmt.Sprintf("notify event handle result from %s", CommandHandleResultProvider),
 				slog.String("command-id", data.CommandID),
+				slog.String("aggregate-id", data.AggregateID),
+				slog.String("aggregate-type", data.AggregateTypeName),
+				slog.Int("stream-version", data.StreamVersion),
 			)
-			ed.notifier.Notify(data.CommandID, CommandHandleResultProvider, result)
 		}()
 	}
 }

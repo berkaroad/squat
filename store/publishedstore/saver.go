@@ -170,7 +170,7 @@ func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store Pu
 			slog.Uint64("data-count", uint64(len(dataMapping))),
 		)
 	} else {
-		logger.Info("batch save to publishedstore success",
+		logger.Debug("batch save to publishedstore success",
 			slog.Uint64("shard-key", uint64(shardKey)),
 			slog.Uint64("data-count", uint64(len(dataMapping))),
 		)

@@ -167,10 +167,12 @@ func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
 		go func() {
 			logger := logging.Get(context.Background())
 			result := <-resultCh
+			cd.notifier.Notify(data.CommandID(), CommandHandleResultProvider, result)
 			logger.Info(fmt.Sprintf("notify command handle result from %s", CommandHandleResultProvider),
 				slog.String("command-id", data.CommandID()),
+				slog.String("aggregate-id", data.AggregateID()),
+				slog.String("aggregate-type", data.AggregateTypeName()),
 			)
-			cd.notifier.Notify(data.CommandID(), CommandHandleResultProvider, result)
 		}()
 	}
 }
