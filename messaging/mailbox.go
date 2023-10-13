@@ -87,26 +87,7 @@ func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggreg
 		),
 	})
 	mb := actual.(*defaultMailbox[TMessage])
-	needInitialize := !loaded
-	if loaded && mb.status.Load() == statusDestoryed {
-		defer p.recreateLocker.Unlock()
-		p.recreateLocker.Lock()
-		p.mailboxes.Delete(mailboxName)
-		p.removedCounter.Add(1)
-		actual, loaded = p.mailboxes.LoadOrStore(mailboxName, &defaultMailbox[TMessage]{
-			name:               mailboxName,
-			autoReleaseTimeout: p.AutoReleaseTimeout,
-			receiverCh:         make(chan MailsWithResult[TMessage], mailboxCapacity),
-			handlers:           handlers,
-			logger: slog.Default().With(
-				slog.String("mailbox", mailboxName),
-			),
-		})
-		mb = actual.(*defaultMailbox[TMessage])
-		needInitialize = !loaded
-	}
-
-	if needInitialize {
+	if !loaded {
 		mb.initialize(func(s string) {
 			p.mailboxes.Delete(mailboxName)
 			p.removedCounter.Add(1)
@@ -125,7 +106,6 @@ func (p *DefaultMailboxProvider[TMessage]) Stats() MailBoxStatistic {
 
 const (
 	statusActived int32 = iota
-	statusActivating
 	statusDisactived
 	statusDestoryed
 )
@@ -147,14 +127,14 @@ func (mb *defaultMailbox[TMessage]) Name() string {
 }
 
 func (mb *defaultMailbox[TMessage]) SendMail(data MailsWithResult[TMessage]) error {
-	mb.status.CompareAndSwap(statusActived, statusActivating)
-	mb.status.CompareAndSwap(statusDisactived, statusActivating)
+	for mb.status.Load() == statusDisactived {
+		time.Sleep(time.Millisecond)
+	}
 	if mb.status.Load() == statusDestoryed {
 		mb.logger.Error(errMailboxDestoryed.Error())
 		return errMailboxDestoryed
 	}
 	mb.receiverCh <- data
-	mb.status.CompareAndSwap(statusActivating, statusActived)
 	return nil
 }
 
@@ -171,12 +151,9 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 			case data := <-mb.receiverCh:
 				mb.processMails(data)
 			case <-time.After(autoReleaseTimeout):
-				mb.status.CompareAndSwap(statusActived, statusDisactived)
-				mb.status.CompareAndSwap(statusDisactived, statusDestoryed)
-				if mb.status.Load() == statusDestoryed {
-					time.Sleep(time.Second)
-					if len(mb.receiverCh) > 0 {
-						continue
+				if mb.status.CompareAndSwap(statusActived, statusDisactived) {
+					for i := 0; i < len(mb.receiverCh); i++ {
+						mb.processMails(<-mb.receiverCh)
 					}
 					close(mb.receiverCh)
 					break loop
@@ -184,6 +161,7 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 			}
 		}
 		removeSelf(mb.name)
+		mb.status.CompareAndSwap(statusDisactived, statusDestoryed)
 		mb.logger.Debug("mailbox removed")
 	}()
 }
