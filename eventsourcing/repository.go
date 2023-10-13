@@ -19,12 +19,13 @@ import (
 var _ domain.Repository[EventSourcedAggregate] = (*EventSourcedRepositoryBase[EventSourcedAggregate])(nil)
 
 type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
-	es         eventstore.EventStore
-	ess        eventstore.EventStoreSaver
-	ss         snapshotstore.SnapshotStore
-	sss        snapshotstore.SnapshotStoreSaver
-	ep         EventPublisher
-	serializer serialization.Serializer
+	SnapshotEnabled bool
+	es              eventstore.EventStore
+	ess             eventstore.EventStoreSaver
+	ss              snapshotstore.SnapshotStore
+	sss             snapshotstore.SnapshotStoreSaver
+	ep              EventPublisher
+	serializer      serialization.Serializer
 
 	initOnce            sync.Once
 	initialized         bool
@@ -77,7 +78,7 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 	logger := logging.Get(ctx)
 	var snapshot AggregateSnapshot
 	var startVersion int
-	if r.ss != nil {
+	if r.SnapshotEnabled && r.ss != nil {
 		snapshotData, err := r.ss.GetSnapshot(ctx, aggregateID)
 		if err != nil {
 			err = fmt.Errorf("%w: %v", ErrGetSnapshotFail, err)
@@ -174,7 +175,7 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 	r.ep.Publish(ctx, eventStream)
 
 	// save snapshot
-	if r.sss != nil {
+	if r.SnapshotEnabled && r.sss != nil {
 		snapshotData, err := ToAggregateSnapshotData(r.serializer, aggregate.Snapshot())
 		if err != nil {
 			return err
