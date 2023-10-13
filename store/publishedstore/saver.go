@@ -15,6 +15,7 @@ import (
 )
 
 type PublishedStoreSaver interface {
+	GetPublishedVersion(ctx context.Context, aggregateID string) (int, error)
 	SavePublished(ctx context.Context, data PublishedEventStreamRef)
 	Start()
 	Stop()
@@ -28,10 +29,11 @@ type DefaultPublishedStoreSaver struct {
 	ShardingAlgorithm func(aggregateID string) uint8
 	ps                PublishedStore
 
-	initOnce    sync.Once
-	initialized bool
-	receiverCh  chan *PublishedEventStreamRef
-	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
+	initOnce              sync.Once
+	initialized           bool
+	receiverCh            chan *PublishedEventStreamRef
+	publishedVersionCache sync.Map
+	status                atomic.Int32 // 0: stop, 1: running, 2: stopping
 }
 
 func (saver *DefaultPublishedStoreSaver) Initialize(publishedStore PublishedStore) *DefaultPublishedStoreSaver {
@@ -50,6 +52,23 @@ func (saver *DefaultPublishedStoreSaver) Initialize(publishedStore PublishedStor
 	return saver
 }
 
+func (saver *DefaultPublishedStoreSaver) GetPublishedVersion(ctx context.Context, aggregateID string) (int, error) {
+	if !saver.initialized {
+		panic("not initialized")
+	}
+
+	if saver.status.Load() != 1 {
+		logger := logging.Get(ctx)
+		logger.Warn("'DefaultPublishedStoreSaver' has stopped")
+	}
+
+	if val, ok := saver.publishedVersionCache.Load(aggregateID); ok {
+		return val.(int), nil
+	}
+
+	return saver.ps.GetPublishedVersion(ctx, aggregateID)
+}
+
 func (saver *DefaultPublishedStoreSaver) SavePublished(ctx context.Context, data PublishedEventStreamRef) {
 	if !saver.initialized {
 		panic("not initialized")
@@ -61,6 +80,9 @@ func (saver *DefaultPublishedStoreSaver) SavePublished(ctx context.Context, data
 	}
 
 	saver.receiverCh <- &data
+	if _, loaded := saver.publishedVersionCache.LoadOrStore(data.AggregateID, data.PublishedVersion); loaded {
+		saver.publishedVersionCache.CompareAndSwap(data.AggregateID, data.PublishedVersion-1, data.PublishedVersion)
+	}
 }
 
 func (saver *DefaultPublishedStoreSaver) Start() {
