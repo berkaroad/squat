@@ -76,10 +76,23 @@ func (ep *DefaultEventPublisher) Initialize(
 }
 
 func (ep *DefaultEventPublisher) Publish(ctx context.Context, eventStream domain.EventStream) {
+	if !ep.initialized {
+		panic("not initialized")
+	}
+
+	if ep.status.Load() != 1 {
+		logger := logging.Get(ctx)
+		logger.Warn("'DefaultEventPublisher' has stopped")
+	}
+
 	ep.receiverCh <- eventStream
 }
 
 func (ep *DefaultEventPublisher) Start() {
+	if !ep.initialized {
+		panic("not initialized")
+	}
+
 	if ep.status.CompareAndSwap(0, 1) {
 		go func() {
 			baseLogger := logging.Get(context.Background())

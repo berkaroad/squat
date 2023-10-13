@@ -56,7 +56,8 @@ func (saver *DefaultPublishedStoreSaver) SavePublished(ctx context.Context, data
 	}
 
 	if saver.status.Load() != 1 {
-		panic("batch saving published store has stopped")
+		logger := logging.Get(ctx)
+		logger.Warn("'DefaultPublishedStoreSaver' has stopped")
 	}
 
 	saver.receiverCh <- &data

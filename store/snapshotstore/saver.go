@@ -57,7 +57,8 @@ func (saver *DefaultSnapshotStoreSaver) SaveSnapshot(ctx context.Context, data A
 	}
 
 	if saver.status.Load() != 1 {
-		panic("batch saving snapshot store has stopped")
+		logger := logging.Get(ctx)
+		logger.Warn("'DefaultSnapshotStoreSaver' has stopped")
 	}
 
 	saver.receiverCh <- &data

@@ -1,12 +1,14 @@
 package inmemorycb
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/eventing"
+	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 	"github.com/berkaroad/squat/utilities/goroutine"
 )
@@ -54,6 +56,11 @@ func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher
 func (cb *InMemoryCommandBus) Send(cmd commanding.Command) (*commanding.CommandHandleResult, error) {
 	if !cb.initialized {
 		panic("not initialized")
+	}
+
+	if cb.status.Load() != 1 {
+		logger := logging.Get(context.TODO())
+		logger.Warn("'InMemoryCommandBus' has stopped")
 	}
 
 	commandHandleResultWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)

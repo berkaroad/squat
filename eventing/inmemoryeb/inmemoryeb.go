@@ -1,12 +1,14 @@
 package inmemoryeb
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/eventing"
+	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/utilities/goroutine"
 )
 
@@ -48,6 +50,11 @@ func (eb *InMemoryEventBus) Initialize(dispatcher eventing.EventDispatcher) *InM
 func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
 	if !eb.initialized {
 		panic("not initialized")
+	}
+
+	if eb.status.Load() != 1 {
+		logger := logging.Get(context.TODO())
+		logger.Warn("'InMemoryEventBus' has stopped")
 	}
 
 	eb.receiverCh <- &es

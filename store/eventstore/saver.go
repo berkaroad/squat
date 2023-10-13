@@ -49,6 +49,15 @@ func (saver *DefaultEventStoreSaver) Initialize(eventStore EventStore) *DefaultE
 }
 
 func (saver *DefaultEventStoreSaver) AppendEventStream(ctx context.Context, data EventStreamData) <-chan error {
+	if !saver.initialized {
+		panic("not initialized")
+	}
+
+	if saver.status.Load() != 1 {
+		logger := logging.Get(ctx)
+		logger.Warn("'DefaultEventStoreSaver' has stopped")
+	}
+
 	resultCh := make(chan error, 1)
 	saver.receiverCh <- eventStreamDataWithResult{
 		Data:     &data,
