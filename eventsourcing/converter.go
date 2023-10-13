@@ -40,7 +40,7 @@ func ToEventStreamData(serializer serialization.Serializer, es domain.EventStrea
 		CommandID:         es.CommandID,
 	}
 	for i, event := range es.Events {
-		body, err := serialization.Serialize(serializer, event)
+		body, err := serialization.SerializeToString(serializer, event)
 		if err != nil {
 			return esd, err
 		}
@@ -48,7 +48,7 @@ func ToEventStreamData(serializer serialization.Serializer, es domain.EventStrea
 			EventID:   event.EventID(),
 			EventType: event.TypeName(),
 			OccurTime: event.OccurTime().Unix(),
-			Body:      string(body),
+			Body:      body,
 		}
 	}
 	return esd, nil
@@ -103,10 +103,10 @@ func ToAggregateSnapshotData(serializer serialization.Serializer, as AggregateSn
 		SnapshotVersion:   as.SnapshotVersion(),
 		SnapshotType:      as.TypeName(),
 	}
-	body, err := serialization.Serialize(serializer, as)
+	body, err := serialization.SerializeToString(serializer, as)
 	if err != nil {
 		return asd, err
 	}
-	asd.Body = string(body)
+	asd.Body = body
 	return asd, nil
 }
