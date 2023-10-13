@@ -1,6 +1,9 @@
 package commanding
 
 import (
+	"time"
+
+	"github.com/berkaroad/squat/errors"
 	"github.com/berkaroad/squat/messaging"
 	"github.com/berkaroad/squat/serialization"
 )
@@ -66,19 +69,47 @@ type CommandHandleResult struct {
 	FromEventWatchItem   messaging.MessageHandleResultWatchItem
 }
 
-func (chr *CommandHandleResult) FromCommandHandle() <-chan messaging.MessageHandleResult {
-	return chr.FromCommandWatchItem.Result()
+func (chr *CommandHandleResult) FromCommandHandle(timeout time.Duration) messaging.MessageHandleResult {
+	if timeout == 0 {
+		timeout = time.Second * 30
+	}
+	select {
+	case fromCommand := <-chr.FromCommandWatchItem.Result():
+		return fromCommand
+	case <-time.After(timeout):
+		return messaging.MessageHandleResult{
+			Err: errors.NewWithCode("", "wait command result from command handler timeout"),
+		}
+	}
 }
 
-func (chr *CommandHandleResult) FromEventHandle() <-chan messaging.MessageHandleResult {
-	fromCommand := <-chr.FromCommandWatchItem.Result()
-	if fromCommand.Err == nil {
-		return chr.FromEventWatchItem.Result()
-	} else {
-		chr.FromEventWatchItem.Unwatch()
-		resultCh := make(chan messaging.MessageHandleResult, 1)
-		resultCh <- fromCommand
-		return resultCh
+func (chr *CommandHandleResult) FromEventHandle(timeout time.Duration) messaging.MessageHandleResult {
+	if timeout == 0 {
+		timeout = time.Second * 30
+	}
+	waitStartTime := time.Now()
+	select {
+	case fromCommand := <-chr.FromCommandWatchItem.Result():
+		if fromCommand.Err == nil {
+			waitDuration := time.Since(waitStartTime)
+			select {
+			case fromEvent := <-chr.FromEventWatchItem.Result():
+				return fromEvent
+			case <-time.After(timeout - waitDuration):
+				return messaging.MessageHandleResult{
+					Code: ErrCodeWaitFromEventHandlerTimeout,
+					Err:  ErrWaitFromEventHandlerTimeout,
+				}
+			}
+		} else {
+			chr.FromEventWatchItem.Unwatch()
+			return fromCommand
+		}
+	case <-time.After(timeout):
+		return messaging.MessageHandleResult{
+			Code: ErrCodeWaitFromCommandHandlerTimeout,
+			Err:  ErrWaitFromCommandHandlerTimeout,
+		}
 	}
 }
 
