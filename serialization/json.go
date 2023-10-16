@@ -2,7 +2,7 @@ package serialization
 
 import "encoding/json"
 
-var _ Serializer = (*JsonSerializer)(nil)
+var _ TextSerializer = (*JsonSerializer)(nil)
 
 type JsonSerializer struct {
 }
@@ -12,9 +12,7 @@ func (s *JsonSerializer) Serialize(v any) ([]byte, error) {
 }
 
 func (s *JsonSerializer) Deserialize(data []byte, v any) error {
-	return json.Unmarshal(data, v)
+	return json.Unmarshal(data, &v)
 }
 
-func (s *JsonSerializer) IsTextSerializer() bool {
-	return true
-}
+func (s *JsonSerializer) TextSerializer() {}

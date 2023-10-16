@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/berkaroad/squat/caching"
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/serialization"
 )
@@ -22,6 +23,10 @@ type AggregateSnapshot interface {
 	AggregateID() string
 	AggregateTypeName() string
 	SnapshotVersion() int
+}
+
+type AggregateSnapshotCache interface {
+	caching.Cache
 }
 
 type EventSourcedAggregateBase struct {

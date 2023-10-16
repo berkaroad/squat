@@ -7,6 +7,7 @@ import (
 	"math"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/logging"
@@ -19,17 +20,22 @@ import (
 var _ domain.Repository[EventSourcedAggregate] = (*EventSourcedRepositoryBase[EventSourcedAggregate])(nil)
 
 type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
-	SnapshotEnabled bool
-	es              eventstore.EventStore
-	ess             eventstore.EventStoreSaver
-	ss              snapshotstore.SnapshotStore
-	sss             snapshotstore.SnapshotStoreSaver
-	ep              EventPublisher
-	serializer      serialization.Serializer
+	SnapshotEnabled  bool
+	CacheEnabled     bool
+	CacheExpiration  time.Duration
+	es               eventstore.EventStore
+	ess              eventstore.EventStoreSaver
+	ss               snapshotstore.SnapshotStore
+	sss              snapshotstore.SnapshotStoreSaver
+	ep               EventPublisher
+	cache            AggregateSnapshotCache
+	serializer       serialization.TextSerializer
+	binarySerializer serialization.BinarySerializer
 
 	initOnce            sync.Once
 	initialized         bool
 	aggregateStructType reflect.Type
+	snapshotTypeName    string
 }
 
 func (r *EventSourcedRepositoryBase[T]) Initialize(
@@ -38,7 +44,9 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 	snapshotStore snapshotstore.SnapshotStore,
 	snapshotStoreSaver snapshotstore.SnapshotStoreSaver,
 	eventPublisher EventPublisher,
-	serializer serialization.Serializer,
+	cache AggregateSnapshotCache,
+	serializer serialization.TextSerializer,
+	binarySerializer serialization.BinarySerializer,
 ) *EventSourcedRepositoryBase[T] {
 	r.initOnce.Do(func() {
 		typ := reflect.TypeOf((*T)(nil)).Elem()
@@ -62,9 +70,12 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 		r.ss = snapshotStore
 		r.sss = snapshotStoreSaver
 		r.ep = eventPublisher
+		r.cache = cache
 		r.serializer = serializer
+		r.binarySerializer = binarySerializer
 
 		r.aggregateStructType = typ
+		r.snapshotTypeName = reflect.New(typ).Interface().(T).Snapshot().TypeName()
 		r.initialized = true
 	})
 	return r
@@ -76,8 +87,27 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 	}
 
 	logger := logging.Get(ctx)
+
 	var snapshot AggregateSnapshot
 	var startVersion int
+	if r.CacheEnabled && r.cache != nil {
+		dataInterface, loaded := r.cache.Get(aggregateID, r.snapshotTypeName)
+		if loaded {
+			newAggregate := reflect.New(r.aggregateStructType).Interface().(T)
+			data := dataInterface.(AggregateSnapshot)
+			err := newAggregate.Restore(data, nil)
+			if err != nil {
+				r.cache.Remove(aggregateID)
+			}
+			logger.Debug("load aggregate from cache",
+				slog.String("aggregate-id", aggregateID),
+			)
+			return newAggregate, nil
+		}
+	}
+
+	var aggregate T
+	eventStreams := make(domain.EventStreamSlice, 0)
 	if r.SnapshotEnabled && r.ss != nil {
 		snapshotData, err := r.ss.GetSnapshot(ctx, aggregateID)
 		if err != nil {
@@ -98,7 +128,6 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 		}
 	}
 
-	var aggregate T
 	eventStreamDatas, err := r.es.QueryEventStreamList(ctx, aggregateID, startVersion+1, math.MaxInt32)
 	if err != nil {
 		err = fmt.Errorf("%w: %v", ErrQueryEventStreamListFail, err)
@@ -110,7 +139,6 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 		return aggregate, err
 	}
 
-	eventStreams := make(domain.EventStreamSlice, 0)
 	for _, eventStreamData := range eventStreamDatas {
 		eventStream, err := ToEventStream(r.serializer, eventStreamData)
 		if err != nil {
@@ -124,8 +152,11 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 	}
 
 	if snapshot != nil || len(eventStreams) > 0 {
-		aggregate = reflect.New(r.aggregateStructType).Interface().(T)
-		aggregate.Restore(snapshot, eventStreams)
+		newAggregate := reflect.New(r.aggregateStructType).Interface().(T)
+		if err = newAggregate.Restore(snapshot, eventStreams); err != nil {
+			return aggregate, err
+		}
+		aggregate = newAggregate
 	}
 	return aggregate, nil
 }
@@ -172,15 +203,17 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 		return err
 	}
 	aggregate.AcceptChanges()
+	if r.CacheEnabled && r.cache != nil {
+		r.cache.Set(aggregate.AggregateID(), aggregate.Snapshot(), r.CacheExpiration)
+	}
 	r.ep.Publish(ctx, eventStream)
 
 	// save snapshot
 	if r.SnapshotEnabled && r.sss != nil {
 		snapshotData, err := ToAggregateSnapshotData(r.serializer, aggregate.Snapshot())
-		if err != nil {
-			return err
+		if err == nil {
+			r.sss.SaveSnapshot(ctx, snapshotData)
 		}
-		r.sss.SaveSnapshot(ctx, snapshotData)
 	}
 	return nil
 }

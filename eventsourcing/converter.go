@@ -9,7 +9,7 @@ import (
 	"github.com/berkaroad/squat/store/snapshotstore"
 )
 
-func ToEventStream(serializer serialization.Serializer, esd eventstore.EventStreamData) (domain.EventStream, error) {
+func ToEventStream(serializer serialization.TextSerializer, esd eventstore.EventStreamData) (domain.EventStream, error) {
 	es := domain.EventStream{
 		AggregateID:       esd.AggregateID,
 		AggregateTypeName: esd.AggregateTypeName,
@@ -31,7 +31,7 @@ func ToEventStream(serializer serialization.Serializer, esd eventstore.EventStre
 	return es, nil
 }
 
-func ToEventStreamData(serializer serialization.Serializer, es domain.EventStream) (eventstore.EventStreamData, error) {
+func ToEventStreamData(serializer serialization.TextSerializer, es domain.EventStream) (eventstore.EventStreamData, error) {
 	esd := eventstore.EventStreamData{
 		AggregateID:       es.AggregateID,
 		AggregateTypeName: es.AggregateTypeName,
@@ -54,7 +54,7 @@ func ToEventStreamData(serializer serialization.Serializer, es domain.EventStrea
 	return esd, nil
 }
 
-func ToEventStreamSlice(serializer serialization.Serializer, esds eventstore.EventStreamDataSlice) (domain.EventStreamSlice, error) {
+func ToEventStreamSlice(serializer serialization.TextSerializer, esds eventstore.EventStreamDataSlice) (domain.EventStreamSlice, error) {
 	if len(esds) == 0 {
 		return nil, nil
 	}
@@ -69,7 +69,7 @@ func ToEventStreamSlice(serializer serialization.Serializer, esds eventstore.Eve
 	return ess, nil
 }
 
-func ToEventStreamDataSlice(serializer serialization.Serializer, ess domain.EventStreamSlice) (eventstore.EventStreamDataSlice, error) {
+func ToEventStreamDataSlice(serializer serialization.TextSerializer, ess domain.EventStreamSlice) (eventstore.EventStreamDataSlice, error) {
 	if len(ess) == 0 {
 		return nil, nil
 	}
@@ -84,7 +84,7 @@ func ToEventStreamDataSlice(serializer serialization.Serializer, ess domain.Even
 	return esds, nil
 }
 
-func ToAggregateSnapshot(serializer serialization.Serializer, asd snapshotstore.AggregateSnapshotData) (AggregateSnapshot, error) {
+func ToAggregateSnapshot(serializer serialization.TextSerializer, asd snapshotstore.AggregateSnapshotData) (AggregateSnapshot, error) {
 	snapshotObj, err := serialization.Deserialize(serializer, asd.SnapshotType, []byte(asd.Body))
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func ToAggregateSnapshot(serializer serialization.Serializer, asd snapshotstore.
 	return snapshot, nil
 }
 
-func ToAggregateSnapshotData(serializer serialization.Serializer, as AggregateSnapshot) (snapshotstore.AggregateSnapshotData, error) {
+func ToAggregateSnapshotData(serializer serialization.TextSerializer, as AggregateSnapshot) (snapshotstore.AggregateSnapshotData, error) {
 	asd := snapshotstore.AggregateSnapshotData{
 		AggregateID:       as.AggregateID(),
 		AggregateTypeName: as.AggregateTypeName(),

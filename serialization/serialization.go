@@ -2,10 +2,15 @@ package serialization
 
 import "encoding/base64"
 
-var defaultSerializer Serializer = &JsonSerializer{}
+var defaultTextSerializer TextSerializer = &JsonSerializer{}
+var defaultBinarySerializer BinarySerializer = &GobSerializer{}
 
-func Default() Serializer {
-	return defaultSerializer
+func DefaultText() TextSerializer {
+	return defaultTextSerializer
+}
+
+func DefaultBinary() BinarySerializer {
+	return defaultBinarySerializer
 }
 
 type Serializable interface {
@@ -15,26 +20,35 @@ type Serializable interface {
 type Serializer interface {
 	Serialize(v any) ([]byte, error)
 	Deserialize(data []byte, v any) error
-	IsTextSerializer() bool
 }
 
-func Serialize(serializer Serializer, v Serializable) ([]byte, error) {
+type BinarySerializer interface {
+	Serializer
+	BinarySerializer()
+}
+
+type TextSerializer interface {
+	Serializer
+	TextSerializer()
+}
+
+func Serialize(serializer Serializer, v any) ([]byte, error) {
 	if serializer == nil {
-		serializer = defaultSerializer
+		serializer = defaultTextSerializer
 	}
 	return serializer.Serialize(v)
 }
 
-func SerializeToString(serializer Serializer, v Serializable) (string, error) {
+func SerializeToString(serializer Serializer, v any) (string, error) {
 	if serializer == nil {
-		serializer = defaultSerializer
+		serializer = defaultTextSerializer
 	}
 	dataBytes, err := serializer.Serialize(v)
 	if err != nil {
 		return "", err
 	}
 	var data string
-	if serializer.IsTextSerializer() {
+	if _, ok := serializer.(TextSerializer); ok {
 		data = string(dataBytes)
 	} else {
 		data = base64.StdEncoding.EncodeToString(dataBytes)
@@ -44,19 +58,12 @@ func SerializeToString(serializer Serializer, v Serializable) (string, error) {
 
 func Deserialize(serializer Serializer, typeName string, data []byte) (any, error) {
 	if serializer == nil {
-		serializer = defaultSerializer
+		serializer = defaultTextSerializer
 	}
 	v, err := NewFromTypeName(typeName)
 	if err != nil {
 		return nil, err
 	}
-	err = serializer.Deserialize(data, &v)
+	err = serializer.Deserialize(data, v)
 	return v, err
-}
-
-func IsTextSerializer(serializer Serializer) bool {
-	if serializer == nil {
-		serializer = defaultSerializer
-	}
-	return serializer.IsTextSerializer()
 }

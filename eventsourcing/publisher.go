@@ -34,7 +34,7 @@ type DefaultEventPublisher struct {
 	es         eventstore.EventStore
 	ps         publishedstore.PublishedStore
 	pss        publishedstore.PublishedStoreSaver
-	serializer serialization.Serializer
+	serializer serialization.TextSerializer
 
 	initOnce    sync.Once
 	initialized bool
@@ -47,7 +47,7 @@ func (ep *DefaultEventPublisher) Initialize(
 	eventStore eventstore.EventStore,
 	publishedStore publishedstore.PublishedStore,
 	publishedStoreSaver publishedstore.PublishedStoreSaver,
-	serializer serialization.Serializer,
+	serializer serialization.TextSerializer,
 ) *DefaultEventPublisher {
 	ep.initOnce.Do(func() {
 		if eventBus == nil {

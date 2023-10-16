@@ -8,20 +8,20 @@ import (
 
 var typeMapper sync.Map //map[string]reflect.Type = make(map[string]reflect.Type)
 
-// MapTo to map struct type to type's name.
+// Map struct type to type's name.
 // Thread unsafe, should be invoked at startup.
-func MapTo[T any]() {
+func Map[T any]() {
 	var t T
 	typ := reflect.TypeOf(t)
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	MapToWith[T](typ.Name())
+	MapTo[T](typ.Name())
 }
 
-// MapToWith to map struct type to string.
+// MapTo to map struct type to custom type name.
 // Thread unsafe, should be invoked at startup.
-func MapToWith[T any](typeName string) {
+func MapTo[T any](typeName string) {
 	var t T
 	typ := reflect.TypeOf(t)
 	for typ.Kind() == reflect.Pointer {
@@ -33,7 +33,7 @@ func MapToWith[T any](typeName string) {
 
 	if existsObj, ok := typeMapper.Load(typeName); ok {
 		exists := existsObj.(reflect.Type)
-		if exists != reflect.TypeOf(t) {
+		if exists != typ {
 			panic(fmt.Sprintf("typeName '%s' mapping fail: has already mapped by '%s/%s'", typeName, exists.PkgPath(), exists.Name()))
 		}
 	} else {
