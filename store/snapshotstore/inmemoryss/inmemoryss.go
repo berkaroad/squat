@@ -3,11 +3,12 @@ package inmemoryss
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/berkaroad/squat/store/snapshotstore"
 )
 
-var instance *InMemorySnapshotStore = &InMemorySnapshotStore{}
+var instance *InMemorySnapshotStore = &InMemorySnapshotStore{SimulateTimeout: time.Millisecond * 20}
 
 func Default() *InMemorySnapshotStore {
 	return instance
@@ -16,10 +17,13 @@ func Default() *InMemorySnapshotStore {
 var _ snapshotstore.SnapshotStore = (*InMemorySnapshotStore)(nil)
 
 type InMemorySnapshotStore struct {
+	SimulateTimeout time.Duration
+
 	snapshotMapper sync.Map
 }
 
 func (s *InMemorySnapshotStore) GetSnapshot(ctx context.Context, aggregateID string) (snapshotstore.AggregateSnapshotData, error) {
+	time.Sleep(s.SimulateTimeout)
 	var snapshotData snapshotstore.AggregateSnapshotData
 	snapshotDataObj, ok := s.snapshotMapper.Load(aggregateID)
 	if !ok {
@@ -30,6 +34,7 @@ func (s *InMemorySnapshotStore) GetSnapshot(ctx context.Context, aggregateID str
 }
 
 func (s *InMemorySnapshotStore) SaveSnapshot(ctx context.Context, datas []snapshotstore.AggregateSnapshotData) error {
+	time.Sleep(s.SimulateTimeout)
 	for _, data := range datas {
 		s.snapshotMapper.Store(data.AggregateID, data)
 	}

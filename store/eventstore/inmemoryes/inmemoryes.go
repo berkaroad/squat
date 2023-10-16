@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/berkaroad/squat/store/eventstore"
 )
 
-var instance *InMemoryEventStore = &InMemoryEventStore{}
+var instance *InMemoryEventStore = &InMemoryEventStore{SimulateTimeout: time.Millisecond * 20}
 
 func Default() *InMemoryEventStore {
 	return instance
@@ -17,10 +18,13 @@ func Default() *InMemoryEventStore {
 var _ eventstore.EventStore = (*InMemoryEventStore)(nil)
 
 type InMemoryEventStore struct {
+	SimulateTimeout time.Duration
+
 	eventstreamMapper sync.Map
 }
 
 func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregateID string, startVersion, endVersion int) (eventstore.EventStreamDataSlice, error) {
+	time.Sleep(s.SimulateTimeout)
 	eventStreamDatas := make(eventstore.EventStreamDataSlice, 0)
 	eventstreamDatasObj, ok := s.eventstreamMapper.Load(aggregateID)
 	if !ok {
@@ -41,6 +45,7 @@ func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregate
 }
 
 func (s *InMemoryEventStore) AppendEventStream(ctx context.Context, datas eventstore.EventStreamDataSlice) error {
+	time.Sleep(s.SimulateTimeout)
 	for _, data := range datas {
 		eventStreamDatas := make(eventstore.EventStreamDataSlice, 0)
 		eventstreamDatasObj, ok := s.eventstreamMapper.Load(data.AggregateID)
