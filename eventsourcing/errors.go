@@ -4,6 +4,7 @@ import "github.com/berkaroad/squat/errors"
 
 const (
 	ErrCodeAggregateNoChange        string = "S:AggregateNoChange"
+	ErrCodeAggregateHasChanged      string = "S:AggregateHasChanged"
 	ErrCodeEmptyAggregateID         string = "S:EmptyAggregateID"
 	ErrCodeInvalidSnapshot          string = "S:InvalidSnapshot"
 	ErrCodeInvalidEventStream       string = "S:InvalidEventStream"
@@ -14,6 +15,7 @@ const (
 
 var (
 	ErrAggregateNoChange        error = errors.NewWithCode(ErrCodeAggregateNoChange, "aggregate no change")
+	ErrAggregateHasChanged      error = errors.NewWithCode(ErrCodeAggregateHasChanged, "aggregate has changed")
 	ErrEmptyAggregateID         error = errors.NewWithCode(ErrCodeEmptyAggregateID, "aggregate id is empty")
 	ErrInvalidSnapshot          error = errors.NewWithCode(ErrCodeInvalidSnapshot, "invalid snapshot")
 	ErrInvalidEventStream       error = errors.NewWithCode(ErrCodeInvalidEventStream, "invalid eventstream")

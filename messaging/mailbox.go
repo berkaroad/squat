@@ -82,7 +82,7 @@ func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggreg
 		autoReleaseTimeout: p.AutoReleaseTimeout,
 		receiverCh:         make(chan MailsWithResult[TMessage], mailboxCapacity),
 		handlers:           handlers,
-		logger: slog.Default().With(
+		logger: logging.Get(context.Background()).With(
 			slog.String("mailbox", mailboxName),
 		),
 	})

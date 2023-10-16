@@ -51,11 +51,11 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 	r.initOnce.Do(func() {
 		typ := reflect.TypeOf((*T)(nil)).Elem()
 		if typ.Kind() != reflect.Pointer {
-			panic("typeparam 'T' from 'EventSourcedRepositoryBase' must be a pointer to struct")
+			panic("typeparam 'T' from 'EventSourcedRepositoryBase' should be a pointer to struct")
 		}
 		typ = typ.Elem()
 		if typ.Kind() != reflect.Struct {
-			panic("typeparam 'T' from 'EventSourcedRepositoryBase' must be a pointer to struct")
+			panic("typeparam 'T' from 'EventSourcedRepositoryBase' should be a pointer to struct")
 		}
 
 		if eventStore == nil {
@@ -98,11 +98,12 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 			err := newAggregate.Restore(data, nil)
 			if err != nil {
 				r.cache.Remove(aggregateID)
+			} else {
+				logger.Debug("load aggregate from cache",
+					slog.String("aggregate-id", aggregateID),
+				)
+				return newAggregate, nil
 			}
-			logger.Debug("load aggregate from cache",
-				slog.String("aggregate-id", aggregateID),
-			)
-			return newAggregate, nil
 		}
 	}
 
@@ -165,7 +166,7 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 	if !r.initialized {
 		panic("not initialized")
 	}
-	if len(aggregate.Changes()) == 0 {
+	if !aggregate.HasChanged() {
 		return ErrAggregateNoChange
 	}
 
