@@ -104,13 +104,20 @@ func (saver *DefaultEventStoreSaver) Start() {
 					}
 				case <-time.After(batchInterval):
 					hasData := false
+					var wg sync.WaitGroup
 					for shardKey, datas := range shardingMapping {
 						if len(datas) > 0 {
 							hasData = true
-							saver.batchSave(bgCtx, store, shardKey, datas)
 							shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
+							wg.Add(1)
+							go func(shardKey uint8, datas map[string]eventStreamDataWithResult) {
+								defer wg.Done()
+
+								saver.batchSave(bgCtx, store, shardKey, datas)
+							}(shardKey, datas)
 						}
 					}
+					wg.Wait()
 					if !hasData && saver.status.Load() != 1 {
 						break loop
 					}
