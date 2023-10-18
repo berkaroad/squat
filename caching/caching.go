@@ -1,6 +1,7 @@
 package caching
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -44,7 +45,7 @@ func (cache *MemoryCache) Get(cacheKey string, typeName string) (data any, loade
 	if val, ok := cache.items.Load(cacheKey); ok {
 		exists := val.(cacheItem)
 		if !exists.IsExpired() {
-			dataInterface, err := serialization.Deserialize(cache.serializer, typeName, exists.Data)
+			dataInterface, err := serialization.Deserialize(cache.serializer, typeName, bytes.NewReader(exists.Data))
 			if err != nil {
 				logger.Error(fmt.Sprintf("deserialize cache item fail: %v", err),
 					slog.String("cache-key", cacheKey),
@@ -70,7 +71,8 @@ func (cache *MemoryCache) Set(cacheKey string, data any, expiration time.Duratio
 	}
 
 	logger := logging.Get(context.Background())
-	if dataBytes, err := serialization.Serialize(cache.serializer, data); err != nil {
+	buf := bytes.NewBuffer(make([]byte, 0, 64))
+	if err := serialization.Serialize(cache.serializer, buf, data); err != nil {
 		logger.Error(fmt.Sprintf("serialize cache item fail: %v", err),
 			slog.String("cache-key", cacheKey),
 		)
@@ -78,7 +80,7 @@ func (cache *MemoryCache) Set(cacheKey string, data any, expiration time.Duratio
 	} else {
 		cache.items.Store(cacheKey, cacheItem{
 			Key:        cacheKey,
-			Data:       dataBytes,
+			Data:       buf.Bytes(),
 			CreateTime: time.Now(),
 			Expiration: expiration,
 		})

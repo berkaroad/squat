@@ -10,7 +10,7 @@ import (
 func TestMemoryCacheSet(t *testing.T) {
 	t.Run("get cache should success", func(t *testing.T) {
 		cache := (&MemoryCache{}).Initialize(&serialization.GobSerializer{})
-		serialization.MapTo[*Class1]("Class1")
+		serialization.Map[*Class1]()
 		data1 := &Class1{ID: "agg1"}
 		cache.Set("key1", data1, 0)
 		dataInterface, loaded := cache.Get("key1", "Class1")
@@ -27,7 +27,7 @@ func TestMemoryCacheSet(t *testing.T) {
 
 	t.Run("get cache should fail if expired", func(t *testing.T) {
 		cache := (&MemoryCache{}).Initialize(&serialization.GobSerializer{})
-		serialization.MapTo[*Class1]("Class1")
+		serialization.Map[*Class1]()
 		data1 := &Class1{ID: "agg1"}
 		cache.Set("key1", data1, time.Millisecond*100)
 		dataInterface, loaded := cache.Get("key1", "Class1")
@@ -53,7 +53,7 @@ func TestMemoryCacheSet(t *testing.T) {
 func TestMemoryCacheRmove(t *testing.T) {
 	t.Run("get cache should fail if removed", func(t *testing.T) {
 		cache := (&MemoryCache{}).Initialize(&serialization.GobSerializer{})
-		serialization.MapTo[*Class1]("Class1")
+		serialization.Map[*Class1]()
 		data1 := &Class1{ID: "agg1"}
 		cache.Set("key1", data1, 0)
 		dataInterface, loaded := cache.Get("key1", "Class1")
@@ -76,6 +76,12 @@ func TestMemoryCacheRmove(t *testing.T) {
 	})
 }
 
+var _ serialization.Serializable = (*Class1)(nil)
+
 type Class1 struct {
 	ID string
+}
+
+func (c *Class1) TypeName() string {
+	return "Class1"
 }

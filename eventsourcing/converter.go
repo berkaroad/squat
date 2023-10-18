@@ -1,6 +1,7 @@
 package eventsourcing
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/berkaroad/squat/domain"
@@ -18,7 +19,7 @@ func ToEventStream(serializer serialization.TextSerializer, esd eventstore.Event
 		CommandID:         esd.CommandID,
 	}
 	for i, eventData := range esd.Events {
-		eventObj, err := serialization.Deserialize(serializer, eventData.EventType, []byte(eventData.Body))
+		eventObj, err := serialization.Deserialize(serializer, eventData.EventType, bytes.NewReader([]byte(eventData.Body)))
 		if err != nil {
 			return es, err
 		}
@@ -40,7 +41,7 @@ func ToEventStreamData(serializer serialization.TextSerializer, es domain.EventS
 		CommandID:         es.CommandID,
 	}
 	for i, event := range es.Events {
-		body, err := serialization.SerializeToString(serializer, event)
+		body, err := serialization.SerializeToText(serializer, event)
 		if err != nil {
 			return esd, err
 		}
@@ -85,7 +86,7 @@ func ToEventStreamDataSlice(serializer serialization.TextSerializer, ess domain.
 }
 
 func ToAggregateSnapshot(serializer serialization.TextSerializer, asd snapshotstore.AggregateSnapshotData) (AggregateSnapshot, error) {
-	snapshotObj, err := serialization.Deserialize(serializer, asd.SnapshotType, []byte(asd.Body))
+	snapshotObj, err := serialization.Deserialize(serializer, asd.SnapshotType, bytes.NewReader([]byte(asd.Body)))
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func ToAggregateSnapshotData(serializer serialization.TextSerializer, as Aggrega
 		SnapshotVersion:   as.SnapshotVersion(),
 		SnapshotType:      as.TypeName(),
 	}
-	body, err := serialization.SerializeToString(serializer, as)
+	body, err := serialization.SerializeToText(serializer, as)
 	if err != nil {
 		return asd, err
 	}

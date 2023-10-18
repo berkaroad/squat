@@ -9,6 +9,8 @@ import (
 var typeMapper sync.Map //map[string]reflect.Type = make(map[string]reflect.Type)
 
 // Map struct type to type's name.
+//
+// Use T.TypeName() as type's name if T implements interface{TypeName() string}, else use struct type's name.
 // Thread unsafe, should be invoked at startup.
 func Map[T any]() {
 	var t T
@@ -16,31 +18,23 @@ func Map[T any]() {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	MapTo[T](typ.Name())
-}
-
-// MapTo to map struct type to custom type name.
-// Thread unsafe, should be invoked at startup.
-func MapTo[T any](typeName string) {
-	var t T
-	typ := reflect.TypeOf(t)
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
 	if typ.Kind() != reflect.Struct {
-		panic(fmt.Sprintf("typeName '%s' mapping fail: only struct or pointer to struct can be mapped, T '%s/%s'", typeName, reflect.TypeOf(t).PkgPath(), reflect.TypeOf(t).Name()))
+		panic(fmt.Sprintf("mapping fail: only struct or pointer to struct can be mapped, T '%s/%s'", reflect.TypeOf(t).PkgPath(), reflect.TypeOf(t).Name()))
 	}
 
-	if existsObj, ok := typeMapper.Load(typeName); ok {
-		exists := existsObj.(reflect.Type)
-		if exists != typ {
+	typeName := typ.Name()
+	obj := reflect.New(typ).Interface()
+	if serializableObj, ok := obj.(Serializable); ok {
+		typeName = serializableObj.TypeName()
+	}
+	if existsObj, loaded := typeMapper.LoadOrStore(typeName, typ); loaded {
+		if exists := existsObj.(reflect.Type); exists != typ {
 			panic(fmt.Sprintf("typeName '%s' mapping fail: has already mapped by '%s/%s'", typeName, exists.PkgPath(), exists.Name()))
 		}
-	} else {
-		typeMapper.Store(typeName, typ)
 	}
 }
 
+// GetType to get struct type that has mapped by type name.
 func GetType(typeName string) (reflect.Type, error) {
 	valObj, ok := typeMapper.Load(typeName)
 	if !ok {
@@ -50,10 +44,11 @@ func GetType(typeName string) (reflect.Type, error) {
 	return val, nil
 }
 
-func NewFromTypeName(typeName string) (any, error) {
+// NewFromTypeName to new struct value that has mapped by type name.
+func NewFromTypeName(typeName string) (reflect.Value, error) {
 	typ, err := GetType(typeName)
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
-	return reflect.New(typ).Interface(), nil
+	return reflect.New(typ), nil
 }

@@ -1,6 +1,10 @@
 package serialization
 
-import "encoding/base64"
+import (
+	"bytes"
+	"encoding/base64"
+	"io"
+)
 
 var defaultTextSerializer TextSerializer = &JsonSerializer{}
 var defaultBinarySerializer BinarySerializer = &GobSerializer{}
@@ -18,8 +22,8 @@ type Serializable interface {
 }
 
 type Serializer interface {
-	Serialize(v any) ([]byte, error)
-	Deserialize(data []byte, v any) error
+	Serialize(w io.Writer, v any) error
+	Deserialize(r io.Reader, v any) error
 }
 
 type BinarySerializer interface {
@@ -32,38 +36,69 @@ type TextSerializer interface {
 	TextSerializer()
 }
 
-func Serialize(serializer Serializer, v any) ([]byte, error) {
+func Serialize(serializer Serializer, r io.Writer, v any) error {
 	if serializer == nil {
 		serializer = defaultTextSerializer
 	}
-	return serializer.Serialize(v)
+
+	err := serializer.Serialize(r, v)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func SerializeToString(serializer Serializer, v any) (string, error) {
+func Deserialize(serializer Serializer, typeName string, r io.Reader) (any, error) {
 	if serializer == nil {
 		serializer = defaultTextSerializer
 	}
-	dataBytes, err := serializer.Serialize(v)
+	vInterface, err := NewFromTypeName(typeName)
+	if err != nil {
+		return nil, err
+	}
+	v := vInterface.Interface()
+	err = serializer.Deserialize(r, v)
+	return v, err
+}
+
+func SerializeToText(serializer Serializer, v any) (string, error) {
+	if serializer == nil {
+		serializer = defaultTextSerializer
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 64))
+	err := serializer.Serialize(buf, v)
 	if err != nil {
 		return "", err
 	}
 	var data string
 	if _, ok := serializer.(TextSerializer); ok {
-		data = string(dataBytes)
+		data = buf.String()
 	} else {
-		data = base64.StdEncoding.EncodeToString(dataBytes)
+		data = base64.StdEncoding.EncodeToString(buf.Bytes())
 	}
 	return data, nil
 }
 
-func Deserialize(serializer Serializer, typeName string, data []byte) (any, error) {
+func DeserializeFromText(serializer Serializer, typeName string, text string) (any, error) {
 	if serializer == nil {
 		serializer = defaultTextSerializer
 	}
-	v, err := NewFromTypeName(typeName)
+	vInterface, err := NewFromTypeName(typeName)
 	if err != nil {
 		return nil, err
 	}
-	err = serializer.Deserialize(data, v)
+
+	var data []byte
+	if _, ok := serializer.(TextSerializer); ok {
+		data = []byte(text)
+	} else {
+		var err error
+		if data, err = base64.StdEncoding.DecodeString(text); err != nil {
+			return nil, err
+		}
+	}
+
+	v := vInterface.Interface()
+	err = serializer.Deserialize(bytes.NewReader(data), v)
 	return v, err
 }
