@@ -23,17 +23,18 @@ var _ commanding.CommandBus = (*InMemoryCommandBus)(nil)
 var _ commanding.CommandProcess = (*InMemoryCommandBus)(nil)
 
 type InMemoryCommandBus struct {
-	BufferSize    int
-	dispatcher    commanding.CommandDispatcher
-	resultWatcher messaging.MessageHandleResultWatcher[commanding.Command]
+	BufferSize            int
+	NoticeServiceEndpoint string
+	dispatcher            commanding.CommandDispatcher
+	resultWatcher         messaging.MessageHandleResultWatcher
 
 	initOnce    sync.Once
 	initialized bool
-	receiverCh  chan commanding.Command
+	receiverCh  chan *commanding.CommandData
 	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
 }
 
-func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher, resultWatcher messaging.MessageHandleResultWatcher[commanding.Command]) *InMemoryCommandBus {
+func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher, resultWatcher messaging.MessageHandleResultWatcher) *InMemoryCommandBus {
 	cb.initOnce.Do(func() {
 		if dispatcher == nil {
 			dispatcher = &commanding.DefaultCommandDispatcher{}
@@ -47,29 +48,75 @@ func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher
 		}
 		cb.dispatcher = dispatcher
 		cb.resultWatcher = resultWatcher
-		cb.receiverCh = make(chan commanding.Command, bufferSize)
+		cb.receiverCh = make(chan *commanding.CommandData, bufferSize)
 		cb.initialized = true
 	})
 	return cb
 }
 
-func (cb *InMemoryCommandBus) Send(cmd commanding.Command) (*commanding.CommandHandleResult, error) {
+func (cb *InMemoryCommandBus) Send(ctx context.Context, cmd commanding.Command) error {
 	if !cb.initialized {
 		panic("not initialized")
 	}
 
 	if cb.status.Load() != 1 {
-		logger := logging.Get(context.TODO())
+		logger := logging.Get(ctx)
 		logger.Warn("'InMemoryCommandBus' has stopped")
 	}
 
-	commandHandleResultWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
-	eventHandleResultWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
-	cb.receiverCh <- cmd
-	return &commanding.CommandHandleResult{
-		FromCommandWatchItem: commandHandleResultWatchItem,
-		FromEventWatchItem:   eventHandleResultWatchItem,
-	}, nil
+	eventMetadata := messaging.FromContext(ctx)
+	if eventMetadata == nil {
+		cb.receiverCh <- &commanding.CommandData{
+			Command: cmd,
+		}
+		return nil
+	} else {
+		if eventMetadata.Category == commanding.MailCategory {
+			panic("'InMemoryCommandBus.Send(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
+		}
+		cb.receiverCh <- &commanding.CommandData{
+			Command: cmd,
+			Extensions: eventMetadata.Extensions.Clone().
+				Remove(messaging.ExtensionKeyNoticeServiceEndpoint).
+				Set(messaging.ExtensionKeyFromMessageID, eventMetadata.MessageID).
+				Set(messaging.ExtensionKeyFromMessageType, eventMetadata.MessageType),
+		}
+		return nil
+	}
+}
+
+func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Command) (*commanding.CommandHandleResult, error) {
+	if !cb.initialized {
+		panic("not initialized")
+	}
+
+	if cb.status.Load() != 1 {
+		logger := logging.Get(ctx)
+		logger.Warn("'InMemoryCommandBus' has stopped")
+	}
+
+	eventMetadata := messaging.FromContext(ctx)
+	if eventMetadata == nil {
+		fromCommandWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
+		fromEventWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
+		cb.receiverCh <- &commanding.CommandData{
+			Command:    cmd,
+			Extensions: map[string]string{string(messaging.ExtensionKeyNoticeServiceEndpoint): cb.NoticeServiceEndpoint},
+		}
+		return commanding.NewCommandHandleResult(fromCommandWatchItem, fromEventWatchItem), nil
+	} else {
+		if eventMetadata.Category == commanding.MailCategory {
+			panic("'InMemoryCommandBus.Execute(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
+		}
+		cb.receiverCh <- &commanding.CommandData{
+			Command: cmd,
+			Extensions: eventMetadata.Extensions.Clone().
+				Remove(messaging.ExtensionKeyNoticeServiceEndpoint).
+				Set(messaging.ExtensionKeyFromMessageID, eventMetadata.MessageID).
+				Set(messaging.ExtensionKeyFromMessageType, eventMetadata.MessageType),
+		}
+		return commanding.NewCommandHandleResult(nil, nil), nil
+	}
 }
 
 func (cb *InMemoryCommandBus) Start() {

@@ -20,27 +20,27 @@ type CommandDispatcher interface {
 	Subscribe(commandTypeName string, handler CommandHandler)
 	SubscribeMulti(handlerGroup CommandHandlerGroup)
 	AddProxy(proxies ...CommandHandlerProxy)
-	Dispatch(data Command)
+	Dispatch(data *CommandData)
 }
 
 var _ CommandDispatcher = (*DefaultCommandDispatcher)(nil)
 
 type DefaultCommandDispatcher struct {
-	mailboxProvider messaging.MailboxProvider[Command]
-	notifier        messaging.MessageHandleResultNotifier[Command]
+	mailboxProvider messaging.MailboxProvider[CommandData]
+	notifier        messaging.MessageHandleResultNotifier
 
 	initOnce        sync.Once
 	initialized     bool
-	handlers        map[string][]messaging.MessageHandler[Command]
-	proxies         []messaging.MessageHandlerProxy[Command]
-	proxiedHandlers map[string][]messaging.MessageHandler[Command]
+	handlers        map[string][]messaging.MessageHandler[CommandData]
+	proxies         []messaging.MessageHandlerProxy[CommandData]
+	proxiedHandlers map[string][]messaging.MessageHandler[CommandData]
 	locker          sync.Mutex
 }
 
-func (cd *DefaultCommandDispatcher) Initialize(mailboxProvider messaging.MailboxProvider[Command], notifier messaging.MessageHandleResultNotifier[Command]) *DefaultCommandDispatcher {
+func (cd *DefaultCommandDispatcher) Initialize(mailboxProvider messaging.MailboxProvider[CommandData], notifier messaging.MessageHandleResultNotifier) *DefaultCommandDispatcher {
 	cd.initOnce.Do(func() {
 		if mailboxProvider == nil {
-			mailboxProvider = &messaging.DefaultMailboxProvider[Command]{}
+			mailboxProvider = &messaging.DefaultMailboxProvider[CommandData]{}
 		}
 		if notifier == nil {
 			panic("param 'notifier' is null")
@@ -71,27 +71,27 @@ func (cd *DefaultCommandDispatcher) Subscribe(commandTypeName string, handler Co
 	}
 
 	if cd.handlers == nil {
-		cd.handlers = map[string][]messaging.MessageHandler[Command]{commandTypeName: {messaging.MessageHandler[Command](handler)}}
+		cd.handlers = map[string][]messaging.MessageHandler[CommandData]{commandTypeName: {messaging.MessageHandler[CommandData](handler)}}
 	} else if _, ok := cd.handlers[commandTypeName]; ok {
 		return
 	} else {
-		cd.handlers[commandTypeName] = []messaging.MessageHandler[Command]{messaging.MessageHandler[Command](handler)}
+		cd.handlers[commandTypeName] = []messaging.MessageHandler[CommandData]{messaging.MessageHandler[CommandData](handler)}
 	}
 	proxiedHande := handler.Handle
 	for _, proxy := range cd.proxies {
 		proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
 	}
-	proxiedHandler := messaging.MessageHandler[Command]{
+	proxiedHandler := messaging.MessageHandler[CommandData]{
 		FuncName: handler.FuncName,
 		Handle:   proxiedHande,
 	}
 
 	if cd.proxiedHandlers == nil {
-		cd.proxiedHandlers = map[string][]messaging.MessageHandler[Command]{commandTypeName: {proxiedHandler}}
+		cd.proxiedHandlers = map[string][]messaging.MessageHandler[CommandData]{commandTypeName: {proxiedHandler}}
 	} else if _, ok := cd.proxiedHandlers[commandTypeName]; ok {
 		return
 	} else {
-		cd.proxiedHandlers[commandTypeName] = []messaging.MessageHandler[Command]{proxiedHandler}
+		cd.proxiedHandlers[commandTypeName] = []messaging.MessageHandler[CommandData]{proxiedHandler}
 	}
 }
 
@@ -101,7 +101,7 @@ func (cd *DefaultCommandDispatcher) SubscribeMulti(handlerGroup CommandHandlerGr
 	}
 
 	if handlerGroup != nil {
-		for commandTypeName, handler := range handlerGroup.Handlers() {
+		for commandTypeName, handler := range handlerGroup.CommandHandlers() {
 			cd.Subscribe(commandTypeName, handler)
 		}
 	}
@@ -116,7 +116,7 @@ func (cd *DefaultCommandDispatcher) AddProxy(proxies ...CommandHandlerProxy) {
 	cd.locker.Lock()
 
 	if cd.proxies == nil {
-		cd.proxies = make([]messaging.MessageHandlerProxy[Command], 0)
+		cd.proxies = make([]messaging.MessageHandlerProxy[CommandData], 0)
 	}
 	for _, proxy := range proxies {
 		if proxy == nil {
@@ -131,7 +131,7 @@ func (cd *DefaultCommandDispatcher) AddProxy(proxies ...CommandHandlerProxy) {
 			for _, proxy := range cd.proxies {
 				proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
 			}
-			proxiedHandler := messaging.MessageHandler[Command]{
+			proxiedHandler := messaging.MessageHandler[CommandData]{
 				FuncName: handler.FuncName,
 				Handle:   proxiedHande,
 			}
@@ -140,7 +140,7 @@ func (cd *DefaultCommandDispatcher) AddProxy(proxies ...CommandHandlerProxy) {
 	}
 }
 
-func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
+func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData) {
 	if !cd.initialized {
 		panic("not initialized")
 	}
@@ -149,9 +149,9 @@ func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
 	defer counter.End()
 
 	resultCh := make(chan messaging.MessageHandleResult, 1)
-	msg := messaging.MailsWithResult[Command]{
+	msg := messaging.MailsWithResult[CommandData]{
 		Category: MailCategory,
-		Mails:    []messaging.Mail[Command]{CreateCommandMail(data)},
+		Mails:    []messaging.Mail[CommandData]{CreateCommandMail(data)},
 		ResultCh: resultCh,
 	}
 	mb := cd.mailboxProvider.GetMailbox(data.AggregateID(), data.AggregateTypeName(), cd.proxiedHandlers)
@@ -164,15 +164,18 @@ func (cd *DefaultCommandDispatcher) Dispatch(data Command) {
 
 	if cd.notifier != nil {
 		// notify event bus
-		go func() {
-			logger := logging.Get(context.Background())
-			result := <-resultCh
-			cd.notifier.Notify(data.CommandID(), CommandHandleResultProvider, result)
-			logger.Info(fmt.Sprintf("notify command handle result from %s", CommandHandleResultProvider),
-				slog.String("command-id", data.CommandID()),
-				slog.String("aggregate-id", data.AggregateID()),
-				slog.String("aggregate-type", data.AggregateTypeName()),
-			)
-		}()
+		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
+			go func() {
+				logger := logging.Get(context.Background())
+				result := <-resultCh
+				cd.notifier.Notify(noticeServiceEndpoint, data.CommandID(), CommandHandleResultProvider, result)
+				logger.Info(fmt.Sprintf("notify command handle result from %s", CommandHandleResultProvider),
+					slog.String("command-id", data.CommandID()),
+					slog.String("command-type", data.TypeName()),
+					slog.String("aggregate-id", data.AggregateID()),
+					slog.String("aggregate-type", data.AggregateTypeName()),
+				)
+			}()
+		}
 	}
 }

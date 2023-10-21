@@ -4,34 +4,36 @@ Domain-Driven Design framework, event sourcing supported, base on EDA and CQRS.
 
 ## Feature List
 
-- Event Sourcing
+* 1. Event Sourcing
 
   Save eventstream when aggregate changed. And also can been restored from eventstreams and snapshot.
 
-  - Save `eventstream` to `eventstore`
+  * 1) Save `eventstream` to `eventstore`
 
-  - Publish `eventstream` to `eventpublisher`
+  * 2) Publish `eventstream` to `eventpublisher`
 
-  - Support taking snapshot for `aggregate` to `snapshotstore`
+  * 3) Support taking snapshot for `aggregate` to `snapshotstore`
 
-- EDA
+* 2. EDA
 
   Publish events and handle them. In event handler, you can also publish another events.
 
-  - Support user-customized `proxy` for event handler
+  * 1) Support user-customized `proxy` for event handler
 
-  - Support notify when command-id related eventstream handled
+  * 2) Support notify when command-id related eventstream handled
 
-  - Support parallel handling events by specific mailbox's name
+  * 3) Support parallel handling events by different mailbox's name
 
-  - Record published eventstream to `publishedstore` when published to eventbus success
+  * 4) Record published eventstream to `publishedstore` when published to eventbus success
 
-- CQRS
+* 3. CQRS
 
   Send command to command bus and returns two results: one is when command handled, the other is when command-id related eventstream handled.
 
-  - Support user-customized `proxy` for command handler
+  * 1) Support user-customized `proxy` for command handler
 
-  - Support notify when command handled
+  * 2) Support notify when command handled
 
-  - Support parallel handling commands by specific mailbox's name
+  * 3) Support parallel handling commands by different mailbox's name
+
+  * 4) Support process manager, for communication with multiple aggregate instances

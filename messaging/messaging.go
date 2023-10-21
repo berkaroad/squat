@@ -16,8 +16,16 @@ type MessageHandlerProxy[TMessage any] interface {
 	Wrap(handleFuncName string, previousHandle MessageHandleFunc[TMessage]) MessageHandleFunc[TMessage]
 }
 
+type Message struct {
+	MessageMetadata
+	Body string `json:"body"`
+}
+
 type MessageMetadata struct {
-	ID                string
-	AggregateID       string
-	AggregateTypeName string
+	MessageID     string     `json:"message_id"`
+	MessageType   string     `json:"message_type"`
+	AggregateID   string     `json:"aggregate_id"`
+	AggregateType string     `json:"aggregate_type"`
+	Category      string     `json:"category"`
+	Extensions    Extensions `json:"extensions"`
 }

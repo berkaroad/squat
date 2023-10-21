@@ -1,7 +1,22 @@
 package errors
 
+import "sync"
+
+const (
+	SysErrCodePrefix string = "squat:"
+)
+
+var mapping sync.Map
+
 func NewWithCode(code string, text string) error {
-	return &errorStringWithCode{text: text, code: code}
+	var err error
+	if val, ok := mapping.Load(code); ok {
+		err = val.(*errorStringWithCode)
+	} else {
+		err = &errorStringWithCode{text: text, code: code}
+		mapping.Store(code, err)
+	}
+	return err
 }
 
 func GetErrorCode(err error) string {

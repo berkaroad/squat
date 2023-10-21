@@ -10,7 +10,7 @@ type PublishedStore interface {
 }
 
 type PublishedEventStreamRef struct {
-	AggregateID       string `json:"aggregate_id" bson:"aggregate_id"`
-	AggregateTypeName string `json:"aggregate_type_name" bson:"aggregate_type_name"`
-	PublishedVersion  int    `json:"published_version" bson:"published_version"`
+	AggregateID      string `json:"aggregate_id" bson:"aggregate_id"`
+	AggregateType    string `json:"aggregate_type" bson:"aggregate_type"`
+	PublishedVersion int    `json:"published_version" bson:"published_version"`
 }

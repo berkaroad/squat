@@ -21,7 +21,7 @@ import (
 )
 
 type EventPublisher interface {
-	Publish(ctx context.Context, eventStream domain.EventStream)
+	Publish(eventStream domain.EventStream)
 	Start()
 	Stop()
 }
@@ -75,13 +75,13 @@ func (ep *DefaultEventPublisher) Initialize(
 	return ep
 }
 
-func (ep *DefaultEventPublisher) Publish(ctx context.Context, eventStream domain.EventStream) {
+func (ep *DefaultEventPublisher) Publish(eventStream domain.EventStream) {
 	if !ep.initialized {
 		panic("not initialized")
 	}
 
 	if ep.status.Load() != 1 {
-		logger := logging.Get(ctx)
+		logger := logging.Get(context.TODO())
 		logger.Warn("'DefaultEventPublisher' has stopped")
 	}
 
@@ -134,7 +134,7 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 	serializer := ep.serializer
 	logger := baseLogger.With(
 		slog.String("aggregate-id", eventStream.AggregateID),
-		slog.String("aggregate-type", eventStream.AggregateTypeName),
+		slog.String("aggregate-type", eventStream.AggregateType),
 		slog.Int("stream-version", eventStream.StreamVersion),
 	)
 	bgCtx := logging.NewContext(context.Background(), logger)
@@ -170,7 +170,7 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 		if err != nil {
 			dataBytes, _ := json.Marshal(unpublishedEventStreamDatas)
 			logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
-				slog.Any("unpublished-eventstream-data", dataBytes),
+				slog.Any("unpublished-eventstream", dataBytes),
 			)
 			return
 		}
@@ -192,7 +192,7 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 		if err != nil {
 			dataBytes, _ := json.Marshal(unpublishedEventStreamDatas)
 			logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
-				slog.Any("unpublished-eventstream-data", dataBytes),
+				slog.Any("unpublished-eventstream", dataBytes),
 			)
 			return
 		}
@@ -201,7 +201,7 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 	if len(unpublishedEventStreams) > 0 {
 		unpublishedLogger := baseLogger.With(
 			slog.String("aggregate-id", eventStream.AggregateID),
-			slog.String("aggregate-type", eventStream.AggregateTypeName),
+			slog.String("aggregate-type", eventStream.AggregateType),
 		)
 		bgCtx2 := logging.NewContext(context.Background(), logger)
 		for _, unpublishedEventStream := range unpublishedEventStreams {
@@ -224,16 +224,16 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 		retrying.RetryForever(func() error {
 			if publishedStoreSaver != nil {
 				publishedStoreSaver.SavePublished(bgCtx2, publishedstore.PublishedEventStreamRef{
-					AggregateID:       eventStream.AggregateID,
-					AggregateTypeName: eventStream.AggregateTypeName,
-					PublishedVersion:  publishedVersion,
+					AggregateID:      eventStream.AggregateID,
+					AggregateType:    eventStream.AggregateType,
+					PublishedVersion: publishedVersion,
 				})
 				return nil
 			} else {
 				return publishedStore.SavePublished(bgCtx2, []publishedstore.PublishedEventStreamRef{{
-					AggregateID:       eventStream.AggregateID,
-					AggregateTypeName: eventStream.AggregateTypeName,
-					PublishedVersion:  publishedVersion,
+					AggregateID:      eventStream.AggregateID,
+					AggregateType:    eventStream.AggregateType,
+					PublishedVersion: publishedVersion,
 				}})
 			}
 		}, time.Second, func(retryCount int, err error) bool {
@@ -260,16 +260,16 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 		retrying.RetryForever(func() error {
 			if publishedStoreSaver != nil {
 				publishedStoreSaver.SavePublished(bgCtx, publishedstore.PublishedEventStreamRef{
-					AggregateID:       eventStream.AggregateID,
-					AggregateTypeName: eventStream.AggregateTypeName,
-					PublishedVersion:  publishedVersion,
+					AggregateID:      eventStream.AggregateID,
+					AggregateType:    eventStream.AggregateType,
+					PublishedVersion: publishedVersion,
 				})
 				return nil
 			} else {
 				return publishedStore.SavePublished(bgCtx, []publishedstore.PublishedEventStreamRef{{
-					AggregateID:       eventStream.AggregateID,
-					AggregateTypeName: eventStream.AggregateTypeName,
-					PublishedVersion:  publishedVersion,
+					AggregateID:      eventStream.AggregateID,
+					AggregateType:    eventStream.AggregateType,
+					PublishedVersion: publishedVersion,
 				}})
 			}
 		}, time.Second, func(retryCount int, err error) bool {

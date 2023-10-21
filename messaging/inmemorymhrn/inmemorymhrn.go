@@ -13,14 +13,14 @@ func Default() *InMemoryMessageHandleResultNotifier {
 	return instance
 }
 
-var _ messaging.MessageHandleResultNotifier[any] = (*InMemoryMessageHandleResultNotifier)(nil)
-var _ messaging.MessageHandleResultWatcher[any] = (*InMemoryMessageHandleResultNotifier)(nil)
+var _ messaging.MessageHandleResultNotifier = (*InMemoryMessageHandleResultNotifier)(nil)
+var _ messaging.MessageHandleResultWatcher = (*InMemoryMessageHandleResultNotifier)(nil)
 
 type InMemoryMessageHandleResultNotifier struct {
 	resultMapper sync.Map
 }
 
-func (notifier *InMemoryMessageHandleResultNotifier) Notify(messageID string, resultProvider string, result messaging.MessageHandleResult) {
+func (notifier *InMemoryMessageHandleResultNotifier) Notify(endpoint string, messageID string, resultProvider string, result messaging.MessageHandleResult) {
 	key := fmt.Sprintf("%s:%s", messageID, resultProvider)
 	if val, ok := notifier.resultMapper.LoadAndDelete(key); ok {
 		writeResultCh := val.(chan messaging.MessageHandleResult)

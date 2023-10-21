@@ -17,11 +17,13 @@ type DomainEventData struct {
 }
 
 type EventStreamData struct {
-	AggregateID       string            `json:"aggregate_id" bson:"aggregate_id"`
-	AggregateTypeName string            `json:"aggregate_type_name" bson:"aggregate_type_name"`
-	StreamVersion     int               `json:"stream_version" bson:"stream_version"`
-	Events            []DomainEventData `json:"events" bson:"events"`
-	CommandID         string            `json:"command_id" bson:"command_id"`
+	AggregateID   string            `json:"aggregate_id" bson:"aggregate_id"`
+	AggregateType string            `json:"aggregate_type" bson:"aggregate_type"`
+	StreamVersion int               `json:"stream_version" bson:"stream_version"`
+	Events        []DomainEventData `json:"events" bson:"events"`
+	CommandID     string            `json:"command_id" bson:"command_id"`
+	CommandType   string            `json:"command_type" bson:"command_type"`
+	Extensions    map[string]string `json:"extensions" bson:"extensions"`
 }
 
 type EventStreamDataSlice []EventStreamData

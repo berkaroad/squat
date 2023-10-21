@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
@@ -17,9 +18,9 @@ import (
 	"github.com/berkaroad/squat/store/snapshotstore"
 )
 
-var _ domain.Repository[EventSourcedAggregate] = (*EventSourcedRepositoryBase[EventSourcedAggregate])(nil)
+var _ domain.Repository[EventSourcedAggregate] = (*EventSourcedRepository[EventSourcedAggregate])(nil)
 
-type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
+type EventSourcedRepository[T EventSourcedAggregate] struct {
 	SnapshotEnabled  bool
 	CacheEnabled     bool
 	CacheExpiration  time.Duration
@@ -38,7 +39,7 @@ type EventSourcedRepositoryBase[T EventSourcedAggregate] struct {
 	snapshotTypeName    string
 }
 
-func (r *EventSourcedRepositoryBase[T]) Initialize(
+func (r *EventSourcedRepository[T]) Initialize(
 	eventStore eventstore.EventStore,
 	eventStoreSaver eventstore.EventStoreSaver,
 	snapshotStore snapshotstore.SnapshotStore,
@@ -47,15 +48,15 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 	cache AggregateSnapshotCache,
 	serializer serialization.TextSerializer,
 	binarySerializer serialization.BinarySerializer,
-) *EventSourcedRepositoryBase[T] {
+) *EventSourcedRepository[T] {
 	r.initOnce.Do(func() {
 		typ := reflect.TypeOf((*T)(nil)).Elem()
 		if typ.Kind() != reflect.Pointer {
-			panic("typeparam 'T' from 'EventSourcedRepositoryBase' should be a pointer to struct")
+			panic("typeparam 'T' from 'EventSourcedRepository[T]' should be a pointer to struct")
 		}
 		typ = typ.Elem()
 		if typ.Kind() != reflect.Struct {
-			panic("typeparam 'T' from 'EventSourcedRepositoryBase' should be a pointer to struct")
+			panic("typeparam 'T' from 'EventSourcedRepository[T]' should be a pointer to struct")
 		}
 
 		if eventStore == nil {
@@ -76,20 +77,27 @@ func (r *EventSourcedRepositoryBase[T]) Initialize(
 
 		r.aggregateStructType = typ
 		r.snapshotTypeName = reflect.New(typ).Interface().(T).Snapshot().TypeName()
+		if r.cache != nil {
+			cache.SetCacheName(r.snapshotTypeName)
+		}
 		r.initialized = true
 	})
 	return r
 }
 
-func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID string) (T, error) {
+func (r *EventSourcedRepository[T]) Get(ctx context.Context, aggregateID string) (T, error) {
 	if !r.initialized {
 		panic("not initialized")
 	}
+	if aggregateID == "" {
+		panic(domain.ErrEmptyAggregateID)
+	}
+	commandMeta := messaging.FromContext(ctx)
+	if commandMeta == nil || commandMeta.Category != commanding.MailCategory {
+		panic("'EventSourcedRepository[T].Get(context.Context, string)' should be invoked in CommandHandler")
+	}
 
 	logger := logging.Get(ctx)
-
-	var snapshot AggregateSnapshot
-	var startVersion int
 	if r.CacheEnabled && r.cache != nil {
 		dataInterface, loaded := r.cache.Get(aggregateID, r.snapshotTypeName)
 		if loaded {
@@ -108,11 +116,12 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 	}
 
 	var aggregate T
-	eventStreams := make(domain.EventStreamSlice, 0)
+	var snapshot AggregateSnapshot
+	var startVersion int
 	if r.SnapshotEnabled && r.ss != nil {
 		snapshotData, err := r.ss.GetSnapshot(ctx, aggregateID)
 		if err != nil {
-			err = fmt.Errorf("%w: %v", ErrGetSnapshotFail, err)
+			err = fmt.Errorf("%w: %v", domain.ErrGetAggregateFail, err)
 			logger.Warn(err.Error(),
 				slog.String("aggregate-id", aggregateID),
 			)
@@ -131,7 +140,7 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 
 	eventStreamDatas, err := r.es.QueryEventStreamList(ctx, aggregateID, startVersion+1, math.MaxInt32)
 	if err != nil {
-		err = fmt.Errorf("%w: %v", ErrQueryEventStreamListFail, err)
+		err = fmt.Errorf("%w: %v", domain.ErrGetAggregateFail, err)
 		logger.Error(err.Error(),
 			slog.String("aggregate-id", aggregateID),
 			slog.Int("start-version", startVersion+1),
@@ -140,6 +149,7 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 		return aggregate, err
 	}
 
+	eventStreams := make(domain.EventStreamSlice, 0)
 	for _, eventStreamData := range eventStreamDatas {
 		eventStream, err := ToEventStream(r.serializer, eventStreamData)
 		if err != nil {
@@ -158,34 +168,47 @@ func (r *EventSourcedRepositoryBase[T]) Get(ctx context.Context, aggregateID str
 			return aggregate, err
 		}
 		aggregate = newAggregate
+		if r.CacheEnabled && r.cache != nil {
+			r.cache.Set(aggregate.AggregateID(), aggregate.Snapshot(), r.CacheExpiration)
+		}
 	}
 	return aggregate, nil
 }
 
-func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) error {
+func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error {
 	if !r.initialized {
 		panic("not initialized")
 	}
-	if !aggregate.HasChanged() {
-		return ErrAggregateNoChange
+	if aggregate.AggregateID() == "" {
+		panic(domain.ErrEmptyAggregateID)
 	}
+	commandMeta := messaging.FromContext(ctx)
+	if commandMeta == nil || commandMeta.Category != commanding.MailCategory {
+		panic("'EventSourcedRepository[T].Save(context.Context, T)' should be invoked in CommandHandler")
+	}
+
+	if !aggregate.HasChanged() {
+		return domain.ErrAggregateNoChange
+	}
+	commandMeta.Extensions = commandMeta.Extensions.Set(messaging.ExtensionKeyAggregateChanged, "true")
 
 	logger := logging.Get(ctx)
-	if aggregate.AggregateID() == "" {
-		return ErrEmptyAggregateID
-	}
-
 	eventStream := domain.EventStream{
-		AggregateID:       aggregate.AggregateID(),
-		AggregateTypeName: aggregate.AggregateTypeName(),
-		StreamVersion:     aggregate.AggregateVersion(),
-		Events:            aggregate.Changes(),
-		CommandID:         messaging.FromContext(ctx).ID,
+		AggregateID:   aggregate.AggregateID(),
+		AggregateType: aggregate.AggregateTypeName(),
+		StreamVersion: aggregate.AggregateVersion(),
+		Events:        aggregate.Changes(),
+		CommandID:     commandMeta.MessageID,
+		CommandType:   commandMeta.MessageType,
+		Extensions: commandMeta.Extensions.Clone().
+			Remove(messaging.ExtensionKeyFromMessageID).
+			Remove(messaging.ExtensionKeyFromMessageType).
+			Remove(messaging.ExtensionKeyAggregateChanged),
 	}
 	eventStreamData, err := ToEventStreamData(r.serializer, eventStream)
 	if err != nil {
+		err = fmt.Errorf("%w: %v", domain.ErrSaveAggregateFail, err)
 		logger.Error(err.Error(),
-			slog.String("aggregate-id", eventStream.AggregateID),
 			slog.Int("stream-version", eventStream.StreamVersion),
 		)
 		return err
@@ -196,10 +219,9 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 		err = r.es.AppendEventStream(ctx, eventstore.EventStreamDataSlice{eventStreamData})
 	}
 	if err != nil {
-		err = fmt.Errorf("%w: %v", ErrAppendEventStreamFail, err)
+		err = fmt.Errorf("%w: %v", domain.ErrSaveAggregateFail, err)
 		logger.Error(err.Error(),
-			slog.String("aggregate-id", aggregate.AggregateID()),
-			slog.Int("stream-version", aggregate.AggregateVersion()),
+			slog.Int("stream-version", eventStream.StreamVersion),
 		)
 		return err
 	}
@@ -207,13 +229,19 @@ func (r *EventSourcedRepositoryBase[T]) Save(ctx context.Context, aggregate T) e
 	if r.CacheEnabled && r.cache != nil {
 		r.cache.Set(aggregate.AggregateID(), aggregate.Snapshot(), r.CacheExpiration)
 	}
-	r.ep.Publish(ctx, eventStream)
+
+	// publish eventstream
+	r.ep.Publish(eventStream)
 
 	// save snapshot
-	if r.SnapshotEnabled && r.sss != nil {
+	if r.SnapshotEnabled && (r.ss != nil || r.sss != nil) {
 		snapshotData, err := ToAggregateSnapshotData(r.serializer, aggregate.Snapshot())
 		if err == nil {
-			r.sss.SaveSnapshot(ctx, snapshotData)
+			if r.sss != nil {
+				r.sss.SaveSnapshot(snapshotData)
+			} else {
+				r.ss.SaveSnapshot(ctx, []snapshotstore.AggregateSnapshotData{snapshotData})
+			}
 		}
 	}
 	return nil

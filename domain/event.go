@@ -14,6 +14,9 @@ type DomainEvent interface {
 
 // Base of event, should override method 'TypeName()'
 func NewDomainEventBase(eventID string) DomainEventBase {
+	if eventID == "" {
+		panic(ErrEmptyEventID)
+	}
 	return DomainEventBase{
 		E_ID: eventID,
 		E_Ts: time.Now().Unix(),
@@ -38,11 +41,13 @@ func (e DomainEventBase) OccurTime() time.Time {
 }
 
 type EventStream struct {
-	AggregateID       string
-	AggregateTypeName string
-	StreamVersion     int
-	Events            []DomainEvent
-	CommandID         string
+	AggregateID   string
+	AggregateType string
+	StreamVersion int
+	Events        []DomainEvent
+	CommandID     string
+	CommandType   string
+	Extensions    map[string]string
 }
 
 type EventStreamSlice []EventStream

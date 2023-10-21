@@ -3,7 +3,7 @@ package messaging
 import "github.com/berkaroad/squat/errors"
 
 const (
-	ErrCodeMissingMessageHandler string = "S:MissingMessageHandler"
+	ErrCodeMissingMessageHandler string = errors.SysErrCodePrefix + "MissingMessageHandler"
 )
 
 var (

@@ -69,11 +69,12 @@ func TestSortEventStreamSlice(t *testing.T) {
 	eventstreams := make(EventStreamSlice, 0)
 	for i := 10; i >= 1; i-- {
 		eventstreams = append(eventstreams, EventStream{
-			AggregateID:       "001",
-			AggregateTypeName: "fruit",
-			StreamVersion:     i,
-			Events:            []DomainEvent{NewDomainEventBase(strconv.Itoa(rand.Int()))},
-			CommandID:         "command-001",
+			AggregateID:   "001",
+			AggregateType: "fruit",
+			StreamVersion: i,
+			Events:        []DomainEvent{NewDomainEventBase(strconv.Itoa(rand.Int()))},
+			CommandID:     "command-001",
+			CommandType:   "commandType1",
 		})
 	}
 

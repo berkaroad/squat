@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/errors"
 	"github.com/berkaroad/squat/internal/counter"
 	"github.com/berkaroad/squat/logging"
@@ -17,7 +18,7 @@ import (
 )
 
 var (
-	errMailboxDestoryed error = errors.NewWithCode("S:MailboxDestoryed", "mailbox has been destoryed")
+	errMailboxDestoryed error = errors.NewWithCode(errors.SysErrCodePrefix+"MailboxDestoryed", "mailbox has been destoryed")
 )
 
 type Mailbox[TMessageBody any] interface {
@@ -28,6 +29,11 @@ type Mailbox[TMessageBody any] interface {
 type MailboxProvider[TMessageBody any] interface {
 	GetMailbox(aggregateID string, aggregateTypeName string, handlers map[string][]MessageHandler[TMessageBody]) Mailbox[TMessageBody]
 	Stats() MailBoxStatistic
+}
+
+type MailBoxStatistic struct {
+	CreatedCount int64
+	RemovedCount int64
 }
 
 type Mail[TMessage any] interface {
@@ -43,13 +49,8 @@ type MailsWithResult[TMessage any] struct {
 }
 
 type MessageHandleResult struct {
-	Err  error
-	Code string
-}
-
-type MailBoxStatistic struct {
-	CreatedCount int64
-	RemovedCount int64
+	Err        error
+	Extensions Extensions
 }
 
 var _ MailboxProvider[any] = (*DefaultMailboxProvider[any])(nil)
@@ -59,8 +60,7 @@ type DefaultMailboxProvider[TMessage any] struct {
 	GetMailboxName     func(aggregateID string, aggregateTypeName string) string
 	AutoReleaseTimeout time.Duration
 
-	mailboxes      sync.Map
-	recreateLocker sync.Mutex
+	mailboxes sync.Map
 
 	// stats
 	createdCounter atomic.Int64
@@ -131,7 +131,7 @@ func (mb *defaultMailbox[TMessage]) SendMail(data MailsWithResult[TMessage]) err
 		time.Sleep(time.Millisecond)
 	}
 	if mb.status.Load() == statusDestoryed {
-		mb.logger.Error(errMailboxDestoryed.Error())
+		mb.logger.Warn(errMailboxDestoryed.Error())
 		return errMailboxDestoryed
 	}
 	mb.receiverCh <- data
@@ -143,7 +143,7 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 	go func() {
 		autoReleaseTimeout := mb.autoReleaseTimeout
 		if autoReleaseTimeout <= 0 {
-			autoReleaseTimeout = time.Second * 10
+			autoReleaseTimeout = time.Second * 30
 		}
 	loop:
 		for {
@@ -178,30 +178,32 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 	allHandlers := mb.handlers
 	var handlerErrs error
 	for _, mail := range data.Mails {
-		messageMetadata := mail.Metadata()
-		messageID := messageMetadata.ID
-		messageTypeName := mail.TypeName()
-		aggregateID := messageMetadata.AggregateID
-		aggregateTypeName := messageMetadata.AggregateTypeName
+		metadata := mail.Metadata()
 		logger := mb.logger.With(
-			slog.String("message-id", messageID),
-			slog.String("message-type", messageTypeName),
-			slog.String("aggregate-id", aggregateID),
-			slog.String("aggregate-type", aggregateTypeName),
+			slog.String("message-id", metadata.MessageID),
+			slog.String("message-type", metadata.MessageType),
+			slog.String("aggregate-id", metadata.AggregateID),
+			slog.String("aggregate-type", metadata.AggregateType),
 		)
-		handleCtx := NewContext(logging.NewContext(context.Background(), logger), messageMetadata)
+		handleCtx := NewContext(logging.NewContext(context.Background(), logger), &metadata)
 
 		var handleErr error
 		var noHandler bool
-		if handlers, ok := allHandlers[messageTypeName]; ok {
+		if handlers, ok := allHandlers[metadata.MessageType]; ok {
 			if len(handlers) == 0 {
 				noHandler = true
 			}
 			for _, handler := range handlers {
+				hasPanic := false
 				err := retrying.Retry(func() (err error) {
 					defer func() {
 						if r := recover(); r != nil {
-							err = fmt.Errorf("%v", r)
+							hasPanic = true
+							if panicErr, ok := r.(error); ok {
+								err = fmt.Errorf("panic: %w", panicErr)
+							} else {
+								err = fmt.Errorf("panic: %v", r)
+							}
 						}
 					}()
 					err = handler.Handle(handleCtx, mail.Unwrap())
@@ -216,13 +218,23 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 					logger.Debug(fmt.Sprintf("handle %s success", data.Category),
 						slog.String(fmt.Sprintf("%s-handler", data.Category), handler.FuncName),
 					)
+				} else if errors.Is(err, domain.ErrAggregateNoChange) {
+					logger.Debug(fmt.Sprintf("handle %s success, but %v", data.Category, err),
+						slog.String(fmt.Sprintf("%s-handler", data.Category), handler.FuncName),
+					)
 				} else {
 					handleErr = errors.Join(err)
+					if hasPanic {
+						logger.Error(fmt.Sprintf("handle %s %v", data.Category, err),
+							slog.String(fmt.Sprintf("%s-handler", data.Category), handler.FuncName),
+						)
+					}
 				}
 			}
 		} else {
 			noHandler = true
 		}
+		handleResult.Extensions = handleResult.Extensions.Merge(metadata.Extensions)
 		if noHandler {
 			handleErr = ErrMissingMessageHandler
 			logger.Warn(fmt.Sprintf("no %s handler", data.Category))
@@ -237,7 +249,6 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 	}
 
 	if handlerErrs != nil {
-		handleResult.Code = errors.GetErrorCode(handlerErrs)
 		handleResult.Err = handlerErrs
 	}
 }

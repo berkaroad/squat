@@ -77,7 +77,7 @@ func (s *EventSourcedAggregateBase) Restore(snapshot AggregateSnapshot, restoreS
 		panic("param 'mutate' is null")
 	}
 	if s.HasChanged() {
-		return ErrAggregateHasChanged
+		return domain.ErrAggregateHasChanged
 	}
 
 	if snapshot != nil {

@@ -3,13 +3,13 @@ package eventstore
 import "github.com/berkaroad/squat/errors"
 
 const (
-	ErrCodeDuplicateKey                   string = "S:DuplicateKey"
-	ErrCodeUnexpectedVersion              string = "S:UnexpectedVersion"
-	ErrCodeEventStreamConcurrencyConflict string = "S:EventStreamConcurrencyConflict"
+	ErrCodeDuplicateCommandIDOrStreamVersion string = errors.SysErrCodePrefix + "es:DuplicateCommandID+StreamVersion"
+	ErrCodeUnexpectedVersion                 string = errors.SysErrCodePrefix + "es:UnexpectedVersion"
+	ErrCodeEventStreamConcurrencyConflict    string = errors.SysErrCodePrefix + "es:EventStreamConcurrencyConflict"
 )
 
 var (
-	ErrDuplicateKey                   error = errors.NewWithCode(ErrCodeDuplicateKey, "duplicate key error")
-	ErrUnexpectedVersion              error = errors.NewWithCode(ErrCodeUnexpectedVersion, "unexpected stream version")
-	ErrEventStreamConcurrencyConflict error = errors.NewWithCode(ErrCodeEventStreamConcurrencyConflict, "concurrency conflict with eventstream")
+	ErrDuplicateCommandIDOrStreamVersion error = errors.NewWithCode(ErrCodeDuplicateCommandIDOrStreamVersion, "duplicate command-id or stream-version")
+	ErrUnexpectedVersion                 error = errors.NewWithCode(ErrCodeUnexpectedVersion, "unexpected stream-version")
+	ErrEventStreamConcurrencyConflict    error = errors.NewWithCode(ErrCodeEventStreamConcurrencyConflict, "concurrency conflict with eventstream")
 )

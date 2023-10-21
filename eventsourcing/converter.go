@@ -12,11 +12,13 @@ import (
 
 func ToEventStream(serializer serialization.TextSerializer, esd eventstore.EventStreamData) (domain.EventStream, error) {
 	es := domain.EventStream{
-		AggregateID:       esd.AggregateID,
-		AggregateTypeName: esd.AggregateTypeName,
-		StreamVersion:     esd.StreamVersion,
-		Events:            make([]domain.DomainEvent, len(esd.Events)),
-		CommandID:         esd.CommandID,
+		AggregateID:   esd.AggregateID,
+		AggregateType: esd.AggregateType,
+		StreamVersion: esd.StreamVersion,
+		Events:        make([]domain.DomainEvent, len(esd.Events)),
+		CommandID:     esd.CommandID,
+		CommandType:   esd.CommandType,
+		Extensions:    esd.Extensions,
 	}
 	for i, eventData := range esd.Events {
 		eventObj, err := serialization.Deserialize(serializer, eventData.EventType, bytes.NewReader([]byte(eventData.Body)))
@@ -34,11 +36,13 @@ func ToEventStream(serializer serialization.TextSerializer, esd eventstore.Event
 
 func ToEventStreamData(serializer serialization.TextSerializer, es domain.EventStream) (eventstore.EventStreamData, error) {
 	esd := eventstore.EventStreamData{
-		AggregateID:       es.AggregateID,
-		AggregateTypeName: es.AggregateTypeName,
-		StreamVersion:     es.StreamVersion,
-		Events:            make([]eventstore.DomainEventData, len(es.Events)),
-		CommandID:         es.CommandID,
+		AggregateID:   es.AggregateID,
+		AggregateType: es.AggregateType,
+		StreamVersion: es.StreamVersion,
+		Events:        make([]eventstore.DomainEventData, len(es.Events)),
+		CommandID:     es.CommandID,
+		CommandType:   es.CommandType,
+		Extensions:    es.Extensions,
 	}
 	for i, event := range es.Events {
 		body, err := serialization.SerializeToText(serializer, event)
@@ -99,10 +103,10 @@ func ToAggregateSnapshot(serializer serialization.TextSerializer, asd snapshotst
 
 func ToAggregateSnapshotData(serializer serialization.TextSerializer, as AggregateSnapshot) (snapshotstore.AggregateSnapshotData, error) {
 	asd := snapshotstore.AggregateSnapshotData{
-		AggregateID:       as.AggregateID(),
-		AggregateTypeName: as.AggregateTypeName(),
-		SnapshotVersion:   as.SnapshotVersion(),
-		SnapshotType:      as.TypeName(),
+		AggregateID:     as.AggregateID(),
+		AggregateType:   as.AggregateTypeName(),
+		SnapshotVersion: as.SnapshotVersion(),
+		SnapshotType:    as.TypeName(),
 	}
 	body, err := serialization.SerializeToText(serializer, as)
 	if err != nil {

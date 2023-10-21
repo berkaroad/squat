@@ -95,7 +95,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = time.Second * 3
+				batchInterval = time.Second
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {

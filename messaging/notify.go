@@ -1,10 +1,10 @@
 package messaging
 
-type MessageHandleResultNotifier[TMessage any] interface {
-	Notify(messageID string, resultProvider string, result MessageHandleResult)
+type MessageHandleResultNotifier interface {
+	Notify(endpoint string, messageID string, resultProvider string, result MessageHandleResult)
 }
 
-type MessageHandleResultWatcher[TMessage any] interface {
+type MessageHandleResultWatcher interface {
 	Watch(messageID string, resultProvider string) MessageHandleResultWatchItem
 }
 

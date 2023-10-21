@@ -15,7 +15,7 @@ import (
 )
 
 type SnapshotStoreSaver interface {
-	SaveSnapshot(ctx context.Context, data AggregateSnapshotData)
+	SaveSnapshot(data AggregateSnapshotData)
 	Start()
 	Stop()
 }
@@ -51,13 +51,13 @@ func (saver *DefaultSnapshotStoreSaver) Initialize(snapshotStore SnapshotStore) 
 	return saver
 }
 
-func (saver *DefaultSnapshotStoreSaver) SaveSnapshot(ctx context.Context, data AggregateSnapshotData) {
+func (saver *DefaultSnapshotStoreSaver) SaveSnapshot(data AggregateSnapshotData) {
 	if !saver.initialized {
 		panic("not initialized")
 	}
 
 	if saver.status.Load() != 1 {
-		logger := logging.Get(ctx)
+		logger := logging.Get(context.TODO())
 		logger.Warn("'DefaultSnapshotStoreSaver' has stopped")
 	}
 
@@ -78,7 +78,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = time.Second * 30
+				batchInterval = time.Second * 10
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {

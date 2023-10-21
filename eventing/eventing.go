@@ -1,6 +1,9 @@
 package eventing
 
 import (
+	"context"
+	"strings"
+
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/messaging"
 )
@@ -19,24 +22,35 @@ type EventProcessor interface {
 type EventHandleFunc = messaging.MessageHandleFunc[EventData]
 
 type EventData struct {
-	AggregateID       string
-	AggregateTypeName string
-	StreamVersion     int
-	Event             domain.DomainEvent
+	domain.DomainEvent
+	AggregateID   string
+	AggregateType string
+	StreamVersion int
+	CommandID     string
+	CommandType   string
+	Extensions    map[string]string
+}
+
+func (data *EventData) SetCustomExtension(ctx context.Context, key string, val string) {
+	metadata := messaging.FromContext(ctx)
+	if metadata != nil && metadata.Category == MailCategory && !strings.HasPrefix(key, messaging.SysExtensionKeyPrefix) {
+		metadata.Extensions = metadata.Extensions.Set(messaging.ExtensionKey(key), val)
+		data.Extensions = metadata.Extensions
+	}
 }
 
 type EventHandler messaging.MessageHandler[EventData]
 
 type EventHandlerGroup interface {
-	Handlers() map[string]EventHandler
+	EventHandlers() map[string]EventHandler
 }
 
 type EventHandlerProxy messaging.MessageHandlerProxy[EventData]
 
 func CreateEventMail(data *EventData) messaging.Mail[EventData] {
 	return &eventMail{
+		DomainEvent: data.DomainEvent,
 		eventData:   data,
-		DomainEvent: data.Event,
 	}
 }
 
@@ -49,9 +63,12 @@ type eventMail struct {
 
 func (m *eventMail) Metadata() messaging.MessageMetadata {
 	return messaging.MessageMetadata{
-		ID:                m.DomainEvent.EventID(),
-		AggregateID:       m.eventData.AggregateID,
-		AggregateTypeName: m.eventData.AggregateTypeName,
+		MessageID:     m.DomainEvent.EventID(),
+		MessageType:   m.DomainEvent.TypeName(),
+		AggregateID:   m.eventData.AggregateID,
+		AggregateType: m.eventData.AggregateType,
+		Category:      MailCategory,
+		Extensions:    m.eventData.Extensions,
 	}
 }
 

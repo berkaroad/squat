@@ -1,25 +1,15 @@
 package commanding
 
 import (
-	"time"
+	"context"
+	"strings"
 
-	"github.com/berkaroad/squat/errors"
+	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/messaging"
 	"github.com/berkaroad/squat/serialization"
 )
 
 const MailCategory string = "command"
-
-type CommandBus interface {
-	Send(cmd Command) (*CommandHandleResult, error)
-}
-
-type CommandProcess interface {
-	Start()
-	Stop()
-}
-
-type CommandHandleFunc = messaging.MessageHandleFunc[Command]
 
 type Command interface {
 	serialization.Serializable
@@ -28,7 +18,46 @@ type Command interface {
 	AggregateTypeName() string
 }
 
+type CommandBus interface {
+	Send(ctx context.Context, cmd Command) error
+	Execute(ctx context.Context, cmd Command) (*CommandHandleResult, error)
+}
+
+type CommandProcess interface {
+	Start()
+	Stop()
+}
+
+type CommandData struct {
+	Command
+	Extensions map[string]string
+}
+
+func (data *CommandData) SetCustomExtension(ctx context.Context, key string, val string) {
+	metadata := messaging.FromContext(ctx)
+	if metadata != nil && metadata.Category == MailCategory && !strings.HasPrefix(key, messaging.SysExtensionKeyPrefix) {
+		metadata.Extensions = metadata.Extensions.Set(messaging.ExtensionKey(key), val)
+		data.Extensions = metadata.Extensions
+	}
+}
+
+type CommandHandleFunc = messaging.MessageHandleFunc[CommandData]
+
+type CommandHandler messaging.MessageHandler[CommandData]
+
+type CommandHandlerGroup interface {
+	CommandHandlers() map[string]CommandHandler
+}
+
+type CommandHandlerProxy messaging.MessageHandlerProxy[CommandData]
+
 func NewCommandBase(commandID string, aggregateID string) CommandBase {
+	if commandID == "" {
+		panic(ErrEmptyCommandID)
+	}
+	if aggregateID == "" {
+		panic(domain.ErrEmptyAggregateID)
+	}
 	return CommandBase{
 		C_ID:          commandID,
 		C_AggregateID: aggregateID,
@@ -56,83 +85,31 @@ func (c CommandBase) AggregateTypeName() string {
 	panic("method 'AggregateTypeName()' not impletement")
 }
 
-type CommandHandler messaging.MessageHandler[Command]
-
-type CommandHandlerGroup interface {
-	Handlers() map[string]CommandHandler
-}
-
-type CommandHandlerProxy messaging.MessageHandlerProxy[Command]
-
-type CommandHandleResult struct {
-	FromCommandWatchItem messaging.MessageHandleResultWatchItem
-	FromEventWatchItem   messaging.MessageHandleResultWatchItem
-}
-
-func (chr *CommandHandleResult) FromCommandHandle(timeout time.Duration) messaging.MessageHandleResult {
-	if timeout == 0 {
-		timeout = time.Second * 30
-	}
-	select {
-	case fromCommand := <-chr.FromCommandWatchItem.Result():
-		return fromCommand
-	case <-time.After(timeout):
-		return messaging.MessageHandleResult{
-			Err: errors.NewWithCode("", "wait command result from command handler timeout"),
-		}
-	}
-}
-
-func (chr *CommandHandleResult) FromEventHandle(timeout time.Duration) messaging.MessageHandleResult {
-	if timeout == 0 {
-		timeout = time.Second * 30
-	}
-	waitStartTime := time.Now()
-	select {
-	case fromCommand := <-chr.FromCommandWatchItem.Result():
-		if fromCommand.Err == nil {
-			waitDuration := time.Since(waitStartTime)
-			select {
-			case fromEvent := <-chr.FromEventWatchItem.Result():
-				return fromEvent
-			case <-time.After(timeout - waitDuration):
-				return messaging.MessageHandleResult{
-					Code: ErrCodeWaitFromEventHandlerTimeout,
-					Err:  ErrWaitFromEventHandlerTimeout,
-				}
-			}
-		} else {
-			chr.FromEventWatchItem.Unwatch()
-			return fromCommand
-		}
-	case <-time.After(timeout):
-		return messaging.MessageHandleResult{
-			Code: ErrCodeWaitFromCommandHandlerTimeout,
-			Err:  ErrWaitFromCommandHandlerTimeout,
-		}
-	}
-}
-
-func CreateCommandMail(cmd Command) messaging.Mail[Command] {
+func CreateCommandMail(data *CommandData) messaging.Mail[CommandData] {
 	return &commandMail{
-		Command: cmd,
+		Command:     data.Command,
+		commandData: data,
 	}
 }
 
-var _ messaging.Mail[Command] = (*commandMail)(nil)
+var _ messaging.Mail[CommandData] = (*commandMail)(nil)
 
 type commandMail struct {
 	Command
+	commandData *CommandData
 }
 
 func (m *commandMail) Metadata() messaging.MessageMetadata {
 	return messaging.MessageMetadata{
-		ID:                m.Command.CommandID(),
-		AggregateID:       m.Command.AggregateID(),
-		AggregateTypeName: m.Command.AggregateTypeName(),
+		MessageID:     m.Command.CommandID(),
+		MessageType:   m.Command.TypeName(),
+		AggregateID:   m.Command.AggregateID(),
+		AggregateType: m.Command.AggregateTypeName(),
+		Category:      MailCategory,
+		Extensions:    m.commandData.Extensions,
 	}
 }
 
-func (m *commandMail) Unwrap() Command {
-	return m.Command
+func (m *commandMail) Unwrap() CommandData {
+	return *m.commandData
 }

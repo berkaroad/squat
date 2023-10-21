@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/internal/counter"
 	"github.com/berkaroad/squat/logging"
@@ -29,7 +28,7 @@ var _ EventDispatcher = (*DefaultEventDispatcher)(nil)
 
 type DefaultEventDispatcher struct {
 	mailboxProvider messaging.MailboxProvider[EventData]
-	notifier        messaging.MessageHandleResultNotifier[EventData]
+	notifier        messaging.MessageHandleResultNotifier
 
 	initOnce        sync.Once
 	initialized     bool
@@ -39,7 +38,7 @@ type DefaultEventDispatcher struct {
 	locker          sync.Mutex
 }
 
-func (ed *DefaultEventDispatcher) Initialize(mailboxProvider messaging.MailboxProvider[EventData], notifier messaging.MessageHandleResultNotifier[commanding.Command]) *DefaultEventDispatcher {
+func (ed *DefaultEventDispatcher) Initialize(mailboxProvider messaging.MailboxProvider[EventData], notifier messaging.MessageHandleResultNotifier) *DefaultEventDispatcher {
 	ed.initOnce.Do(func() {
 		if mailboxProvider == nil {
 			mailboxProvider = &messaging.DefaultMailboxProvider[EventData]{}
@@ -106,7 +105,7 @@ func (ed *DefaultEventDispatcher) SubscribeMulti(handlerGroup EventHandlerGroup)
 	}
 
 	if handlerGroup != nil {
-		for eventTypeName, handler := range handlerGroup.Handlers() {
+		for eventTypeName, handler := range handlerGroup.EventHandlers() {
 			ed.Subscribe(eventTypeName, EventHandler(handler))
 		}
 	}
@@ -161,32 +160,40 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 	}
 	for i, event := range data.Events {
 		mail.Mails[i] = CreateEventMail(&EventData{
-			AggregateID:       data.AggregateID,
-			AggregateTypeName: data.AggregateTypeName,
-			StreamVersion:     data.StreamVersion,
-			Event:             event,
+			DomainEvent:   event,
+			AggregateID:   data.AggregateID,
+			AggregateType: data.AggregateType,
+			StreamVersion: data.StreamVersion,
+			CommandID:     data.CommandID,
+			CommandType:   data.CommandType,
+			Extensions: messaging.Extensions(data.Extensions).
+				Set(messaging.ExtensionKeyFromMessageID, data.CommandID).
+				Set(messaging.ExtensionKeyFromMessageType, data.CommandType),
 		})
 	}
-	mb := ed.mailboxProvider.GetMailbox(data.AggregateID, data.AggregateTypeName, ed.proxiedHandlers)
+	mb := ed.mailboxProvider.GetMailbox(data.AggregateID, data.AggregateType, ed.proxiedHandlers)
 	err := mb.SendMail(mail)
 	for err != nil {
 		time.Sleep(time.Millisecond)
-		mb = ed.mailboxProvider.GetMailbox(data.AggregateID, data.AggregateTypeName, ed.proxiedHandlers)
+		mb = ed.mailboxProvider.GetMailbox(data.AggregateID, data.AggregateType, ed.proxiedHandlers)
 		err = mb.SendMail(mail)
 	}
 
 	if ed.notifier != nil {
 		// notify event bus
-		go func() {
-			logger := logging.Get(context.Background())
-			result := <-resultCh
-			ed.notifier.Notify(data.CommandID, CommandHandleResultProvider, result)
-			logger.Info(fmt.Sprintf("notify event handle result from %s", CommandHandleResultProvider),
-				slog.String("command-id", data.CommandID),
-				slog.String("aggregate-id", data.AggregateID),
-				slog.String("aggregate-type", data.AggregateTypeName),
-				slog.Int("stream-version", data.StreamVersion),
-			)
-		}()
+		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
+			go func() {
+				logger := logging.Get(context.Background())
+				result := <-resultCh
+				ed.notifier.Notify(noticeServiceEndpoint, data.CommandID, CommandHandleResultProvider, result)
+				logger.Info(fmt.Sprintf("notify event handle result from %s", CommandHandleResultProvider),
+					slog.String("command-id", data.CommandID),
+					slog.String("command-type", data.CommandType),
+					slog.String("aggregate-id", data.AggregateID),
+					slog.String("aggregate-type", data.AggregateType),
+					slog.Int("stream-version", data.StreamVersion),
+				)
+			}()
+		}
 	}
 }
