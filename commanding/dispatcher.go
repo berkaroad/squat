@@ -77,19 +77,17 @@ func (cd *DefaultCommandDispatcher) Subscribe(commandTypeName string, handler Co
 	} else {
 		cd.handlers[commandTypeName] = []messaging.MessageHandler[CommandData]{messaging.MessageHandler[CommandData](handler)}
 	}
-	proxiedHande := handler.Handle
+	proxiedHandle := handler.Handle
 	for _, proxy := range cd.proxies {
-		proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
+		proxiedHandle = proxy.Wrap(handler.FuncName, proxiedHandle)
 	}
 	proxiedHandler := messaging.MessageHandler[CommandData]{
 		FuncName: handler.FuncName,
-		Handle:   proxiedHande,
+		Handle:   proxiedHandle,
 	}
 
 	if cd.proxiedHandlers == nil {
 		cd.proxiedHandlers = map[string][]messaging.MessageHandler[CommandData]{commandTypeName: {proxiedHandler}}
-	} else if _, ok := cd.proxiedHandlers[commandTypeName]; ok {
-		return
 	} else {
 		cd.proxiedHandlers[commandTypeName] = []messaging.MessageHandler[CommandData]{proxiedHandler}
 	}
@@ -125,17 +123,24 @@ func (cd *DefaultCommandDispatcher) AddProxy(proxies ...CommandHandlerProxy) {
 		cd.proxies = append(cd.proxies, proxy)
 	}
 
-	for _, handlers := range cd.handlers {
-		for i, handler := range handlers {
-			proxiedHande := handler.Handle
-			for _, proxy := range cd.proxies {
-				proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
-			}
-			proxiedHandler := messaging.MessageHandler[CommandData]{
-				FuncName: handler.FuncName,
-				Handle:   proxiedHande,
-			}
-			handlers[i] = proxiedHandler
+	cd.proxiedHandlers = nil
+	for commandTypeName, handlers := range cd.handlers {
+		if len(handlers) == 0 {
+			continue
+		}
+		handler := handlers[0]
+		proxiedHandle := handler.Handle
+		for _, proxy := range cd.proxies {
+			proxiedHandle = proxy.Wrap(handler.FuncName, proxiedHandle)
+		}
+		proxiedHandler := messaging.MessageHandler[CommandData]{
+			FuncName: handler.FuncName,
+			Handle:   proxiedHandle,
+		}
+		if cd.proxiedHandlers == nil {
+			cd.proxiedHandlers = map[string][]messaging.MessageHandler[CommandData]{commandTypeName: {proxiedHandler}}
+		} else {
+			cd.proxiedHandlers[commandTypeName] = []messaging.MessageHandler[CommandData]{proxiedHandler}
 		}
 	}
 }

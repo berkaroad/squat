@@ -80,13 +80,13 @@ func (ed *DefaultEventDispatcher) Subscribe(eventTypeName string, handler EventH
 		ed.handlers[eventTypeName] = []messaging.MessageHandler[EventData]{messaging.MessageHandler[EventData](handler)}
 	}
 
-	proxiedHande := handler.Handle
+	proxiedHandle := handler.Handle
 	for _, proxy := range ed.proxies {
-		proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
+		proxiedHandle = proxy.Wrap(handler.FuncName, proxiedHandle)
 	}
 	proxiedHandler := messaging.MessageHandler[EventData]{
 		FuncName: handler.FuncName,
-		Handle:   proxiedHande,
+		Handle:   proxiedHandle,
 	}
 
 	if ed.proxiedHandlers == nil {
@@ -129,17 +129,25 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 		ed.proxies = append(ed.proxies, proxy)
 	}
 
-	for _, handlers := range ed.handlers {
-		for i, handler := range handlers {
-			proxiedHande := handler.Handle
+	ed.proxiedHandlers = nil
+	for eventTypeName, handlers := range ed.handlers {
+		for _, handler := range handlers {
+			proxiedHandle := handler.Handle
 			for _, proxy := range ed.proxies {
-				proxiedHande = proxy.Wrap(handler.FuncName, proxiedHande)
+				proxiedHandle = proxy.Wrap(handler.FuncName, proxiedHandle)
 			}
 			proxiedHandler := messaging.MessageHandler[EventData]{
 				FuncName: handler.FuncName,
-				Handle:   proxiedHande,
+				Handle:   proxiedHandle,
 			}
-			handlers[i] = proxiedHandler
+			if ed.proxiedHandlers == nil {
+				ed.proxiedHandlers = map[string][]messaging.MessageHandler[EventData]{eventTypeName: {proxiedHandler}}
+			} else if existsProxiedHandlers, ok := ed.proxiedHandlers[eventTypeName]; ok {
+				existsProxiedHandlers = append(existsProxiedHandlers, proxiedHandler)
+				ed.proxiedHandlers[eventTypeName] = existsProxiedHandlers
+			} else {
+				ed.proxiedHandlers[eventTypeName] = []messaging.MessageHandler[EventData]{proxiedHandler}
+			}
 		}
 	}
 }
