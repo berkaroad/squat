@@ -5,7 +5,7 @@ name: Go
 
 on:
   push:
-    branches: [ "master", "feature-cqrs" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 

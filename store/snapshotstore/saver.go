@@ -20,6 +20,8 @@ type SnapshotStoreSaver interface {
 	Stop()
 }
 
+const checkInterval time.Duration = time.Millisecond * 10
+
 var _ SnapshotStoreSaver = (*DefaultSnapshotStoreSaver)(nil)
 
 type DefaultSnapshotStoreSaver struct {
@@ -86,6 +88,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 			}
 			store := saver.ss
 			shardingMapping := make(map[uint8]map[string]*AggregateSnapshotData)
+			shardingTimeMapping := make(map[uint8]time.Time)
 			snapshotVersionDiffMapping := make(map[string]*snapshotVersionDiff)
 			bgCtx := context.Background()
 		loop:
@@ -99,6 +102,9 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 					if _, ok := shardingMapping[shardKey]; !ok {
 						shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
 					}
+					if _, ok := shardingTimeMapping[shardKey]; !ok {
+						shardingTimeMapping[shardKey] = time.Now()
+					}
 					if exists, ok := snapshotVersionDiffMapping[data.AggregateID]; !ok {
 						snapshotVersionDiffMapping[data.AggregateID] = &snapshotVersionDiff{StartVersion: 1, EndVersion: 1}
 					} else if exists.EndVersion < data.SnapshotVersion {
@@ -108,31 +114,42 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 						}
 					}
 					if len(shardingMapping[shardKey]) >= batchSize {
+						delete(shardingTimeMapping, shardKey)
 						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
 						for aggrID := range shardingMapping[shardKey] {
 							delete(snapshotVersionDiffMapping, aggrID)
 						}
 						shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
 					}
-				case <-time.After(batchInterval):
+				case <-time.After(checkInterval):
 					hasData := false
-					var wg sync.WaitGroup
-					for shardKey, datas := range shardingMapping {
-						if len(datas) > 0 {
-							hasData = true
-							for aggrID := range shardingMapping[shardKey] {
-								delete(snapshotVersionDiffMapping, aggrID)
-							}
-							shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
-							wg.Add(1)
-							go func(shardKey uint8, datas map[string]*AggregateSnapshotData) {
-								defer wg.Done()
-
-								saver.batchSave(bgCtx, store, shardKey, datas)
-							}(shardKey, datas)
+					timeoutShardKeys := make([]uint8, 0)
+					for shardKey, timestamp := range shardingTimeMapping {
+						if time.Since(timestamp) >= batchInterval {
+							timeoutShardKeys = append(timeoutShardKeys, shardKey)
 						}
 					}
-					wg.Wait()
+					if len(timeoutShardKeys) > 0 {
+						var wg sync.WaitGroup
+						for _, shardKey := range timeoutShardKeys {
+							delete(shardingTimeMapping, shardKey)
+							datas := shardingMapping[shardKey]
+							if len(datas) > 0 {
+								hasData = true
+								for aggrID := range shardingMapping[shardKey] {
+									delete(snapshotVersionDiffMapping, aggrID)
+								}
+								shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
+								wg.Add(1)
+								go func(shardKey uint8, datas map[string]*AggregateSnapshotData) {
+									defer wg.Done()
+
+									saver.batchSave(bgCtx, store, shardKey, datas)
+								}(shardKey, datas)
+							}
+						}
+						wg.Wait()
+					}
 					if !hasData && saver.status.Load() != 1 {
 						break loop
 					}
