@@ -20,6 +20,10 @@ type EventStoreSaver interface {
 	Stop()
 }
 
+const checkInterval time.Duration = time.Millisecond * 10
+
+var _ EventStoreSaver = (*DefaultEventStoreSaver)(nil)
+
 type DefaultEventStoreSaver struct {
 	BatchSize         int
 	BatchInterval     time.Duration
@@ -76,7 +80,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = time.Millisecond * 100
+				batchInterval = time.Second
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
@@ -84,6 +88,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 			}
 			store := saver.es
 			shardingMapping := make(map[uint8]map[string]eventStreamDataWithResult)
+			shardingTimeMapping := make(map[uint8]time.Time)
 			bgCtx := context.Background()
 		loop:
 			for {
@@ -93,31 +98,45 @@ func (saver *DefaultEventStoreSaver) Start() {
 					if _, ok := shardingMapping[shardKey]; !ok {
 						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
 					}
+					if _, ok := shardingTimeMapping[shardKey]; !ok {
+						shardingTimeMapping[shardKey] = time.Now()
+					}
 					if _, ok := shardingMapping[shardKey][data.Data.AggregateID]; !ok {
 						shardingMapping[shardKey][data.Data.AggregateID] = data
 					} else {
 						data.ResultCh <- ErrEventStreamConcurrencyConflict
 					}
 					if len(shardingMapping[shardKey]) >= batchSize {
+						delete(shardingTimeMapping, shardKey)
 						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
 						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
 					}
-				case <-time.After(batchInterval):
+				case <-time.After(checkInterval):
 					hasData := false
-					var wg sync.WaitGroup
-					for shardKey, datas := range shardingMapping {
-						if len(datas) > 0 {
-							hasData = true
-							shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
-							wg.Add(1)
-							go func(shardKey uint8, datas map[string]eventStreamDataWithResult) {
-								defer wg.Done()
-
-								saver.batchSave(bgCtx, store, shardKey, datas)
-							}(shardKey, datas)
+					timeoutShardKeys := make([]uint8, 0)
+					for shardKey, timestamp := range shardingTimeMapping {
+						if time.Since(timestamp) >= batchInterval {
+							timeoutShardKeys = append(timeoutShardKeys, shardKey)
 						}
 					}
-					wg.Wait()
+					if len(timeoutShardKeys) > 0 {
+						var wg sync.WaitGroup
+						for _, shardKey := range timeoutShardKeys {
+							delete(shardingTimeMapping, shardKey)
+							datas := shardingMapping[shardKey]
+							if len(datas) > 0 {
+								hasData = true
+								shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
+								wg.Add(1)
+								go func(shardKey uint8, datas map[string]eventStreamDataWithResult) {
+									defer wg.Done()
+
+									saver.batchSave(bgCtx, store, shardKey, datas)
+								}(shardKey, datas)
+							}
+						}
+						wg.Wait()
+					}
 					if !hasData && saver.status.Load() != 1 {
 						break loop
 					}
