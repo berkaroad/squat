@@ -62,7 +62,17 @@ func (cb *InMemoryCommandBus) Send(ctx context.Context, cmd commanding.Command) 
 	if cb.status.Load() != 1 {
 		logger := logging.Get(ctx)
 		logger.Warn("'InMemoryCommandBus' has stopped")
+		return commanding.ErrStoppedCommandBus
 	}
+
+	defer func() error {
+		if recover() != nil {
+			logger := logging.Get(ctx)
+			logger.Warn("'InMemoryCommandBus' has stopped")
+			return commanding.ErrStoppedCommandBus
+		}
+		return nil
+	}()
 
 	eventMetadata := messaging.FromContext(ctx)
 	if eventMetadata == nil {
@@ -93,12 +103,22 @@ func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Comman
 	if cb.status.Load() != 1 {
 		logger := logging.Get(ctx)
 		logger.Warn("'InMemoryCommandBus' has stopped")
+		return nil, commanding.ErrStoppedCommandBus
 	}
 
 	eventMetadata := messaging.FromContext(ctx)
 	if eventMetadata == nil {
 		fromCommandWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
 		fromEventWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
+
+		defer func() (*commanding.CommandHandleResult, error) {
+			if recover() != nil {
+				logger := logging.Get(ctx)
+				logger.Warn("'InMemoryCommandBus' has stopped")
+				return nil, commanding.ErrStoppedCommandBus
+			}
+			return nil, nil
+		}()
 		cb.receiverCh <- &commanding.CommandData{
 			Command:    cmd,
 			Extensions: map[string]string{string(messaging.ExtensionKeyNoticeServiceEndpoint): cb.NoticeServiceEndpoint},
@@ -108,6 +128,14 @@ func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Comman
 		if eventMetadata.Category == commanding.MailCategory {
 			panic("'InMemoryCommandBus.Execute(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
 		}
+		defer func() (*commanding.CommandHandleResult, error) {
+			if recover() != nil {
+				logger := logging.Get(ctx)
+				logger.Warn("'InMemoryCommandBus' has stopped")
+				return nil, commanding.ErrStoppedCommandBus
+			}
+			return nil, nil
+		}()
 		cb.receiverCh <- &commanding.CommandData{
 			Command: cmd,
 			Extensions: eventMetadata.Extensions.Clone().
@@ -152,5 +180,6 @@ func (cb *InMemoryCommandBus) Stop() {
 		time.Sleep(time.Second)
 	}
 	<-goroutine.Wait()
+	close(cb.receiverCh)
 	cb.status.CompareAndSwap(2, 0)
 }

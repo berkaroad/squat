@@ -55,7 +55,17 @@ func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
 	if eb.status.Load() != 1 {
 		logger := logging.Get(context.TODO())
 		logger.Warn("'InMemoryEventBus' has stopped")
+		return eventing.ErrStoppedEventBus
 	}
+
+	defer func() error {
+		if recover() != nil {
+			logger := logging.Get(context.TODO())
+			logger.Warn("'InMemoryEventBus' has stopped")
+			return eventing.ErrStoppedEventBus
+		}
+		return nil
+	}()
 
 	eb.receiverCh <- &es
 	return nil
@@ -94,5 +104,6 @@ func (eb *InMemoryEventBus) Stop() {
 		time.Sleep(time.Second)
 	}
 	<-goroutine.Wait()
+	close(eb.receiverCh)
 	eb.status.CompareAndSwap(2, 0)
 }

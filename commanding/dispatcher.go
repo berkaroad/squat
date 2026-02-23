@@ -57,8 +57,8 @@ func (cd *DefaultCommandDispatcher) Subscribe(commandTypeName string, handler Co
 		panic("not initialized")
 	}
 
-	defer cd.locker.Unlock()
 	cd.locker.Lock()
+	defer cd.locker.Unlock()
 
 	if commandTypeName == "" {
 		panic("param 'commandTypeName' is empty")
@@ -72,9 +72,8 @@ func (cd *DefaultCommandDispatcher) Subscribe(commandTypeName string, handler Co
 
 	if cd.handlers == nil {
 		cd.handlers = map[string][]messaging.MessageHandler[CommandData]{commandTypeName: {messaging.MessageHandler[CommandData](handler)}}
-	} else if _, ok := cd.handlers[commandTypeName]; ok {
-		return
 	} else {
+		// One command type only mapping to one message handler. If exists, ignore it
 		cd.handlers[commandTypeName] = []messaging.MessageHandler[CommandData]{messaging.MessageHandler[CommandData](handler)}
 	}
 	proxiedHandle := handler.Handle
@@ -110,8 +109,8 @@ func (cd *DefaultCommandDispatcher) AddProxy(proxies ...CommandHandlerProxy) {
 		panic("not initialized")
 	}
 
-	defer cd.locker.Unlock()
 	cd.locker.Lock()
+	defer cd.locker.Unlock()
 
 	if cd.proxies == nil {
 		cd.proxies = make([]messaging.MessageHandlerProxy[CommandData], 0)
@@ -128,7 +127,7 @@ func (cd *DefaultCommandDispatcher) AddProxy(proxies ...CommandHandlerProxy) {
 		if len(handlers) == 0 {
 			continue
 		}
-		handler := handlers[0]
+		handler := handlers[0] // One command type only mapping to one message handler. So just fetch first message handler.
 		proxiedHandle := handler.Handle
 		for _, proxy := range cd.proxies {
 			proxiedHandle = proxy.Wrap(handler.FuncName, proxiedHandle)
@@ -167,7 +166,8 @@ func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData) {
 		err = mb.SendMail(msg)
 	}
 
-	if cd.notifier != nil {
+	// Avoid starting a notifier goroutine if there are no proxied handlers; the channel would never receive a value.
+	if cd.notifier != nil && len(cd.proxiedHandlers) > 0 {
 		// notify event bus
 		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
 			go func() {

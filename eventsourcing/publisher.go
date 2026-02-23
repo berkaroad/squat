@@ -83,7 +83,15 @@ func (ep *DefaultEventPublisher) Publish(eventStream domain.EventStream) {
 	if ep.status.Load() != 1 {
 		logger := logging.Get(context.TODO())
 		logger.Warn("'DefaultEventPublisher' has stopped")
+		return
 	}
+
+	defer func() {
+		if recover() != nil {
+			logger := logging.Get(context.TODO())
+			logger.Warn("'DefaultEventPublisher' has stopped")
+		}
+	}()
 
 	ep.receiverCh <- &eventStream
 }
@@ -122,6 +130,7 @@ func (ep *DefaultEventPublisher) Stop() {
 		time.Sleep(time.Second)
 	}
 	<-goroutine.Wait()
+	close(ep.receiverCh)
 	ep.status.CompareAndSwap(2, 0)
 }
 

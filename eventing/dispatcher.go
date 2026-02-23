@@ -58,8 +58,8 @@ func (ed *DefaultEventDispatcher) Subscribe(eventTypeName string, handler EventH
 		panic("not initialized")
 	}
 
-	defer ed.locker.Unlock()
 	ed.locker.Lock()
+	defer ed.locker.Unlock()
 
 	if eventTypeName == "" {
 		panic("param 'eventTypeName' is empty")
@@ -74,6 +74,7 @@ func (ed *DefaultEventDispatcher) Subscribe(eventTypeName string, handler EventH
 	if ed.handlers == nil {
 		ed.handlers = map[string][]messaging.MessageHandler[EventData]{eventTypeName: {messaging.MessageHandler[EventData](handler)}}
 	} else if existsHandlers, ok := ed.handlers[eventTypeName]; ok {
+		// Append to existing handlers for this event type
 		existsHandlers = append(existsHandlers, messaging.MessageHandler[EventData](handler))
 		ed.handlers[eventTypeName] = existsHandlers
 	} else {
@@ -116,8 +117,8 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 		panic("not initialized")
 	}
 
-	defer ed.locker.Unlock()
 	ed.locker.Lock()
+	defer ed.locker.Unlock()
 
 	if ed.proxies == nil {
 		ed.proxies = make([]messaging.MessageHandlerProxy[EventData], 0)
@@ -129,7 +130,7 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 		ed.proxies = append(ed.proxies, proxy)
 	}
 
-	ed.proxiedHandlers = nil
+	ed.proxiedHandlers = make(map[string][]messaging.MessageHandler[EventData])
 	for eventTypeName, handlers := range ed.handlers {
 		for _, handler := range handlers {
 			proxiedHandle := handler.Handle
@@ -140,9 +141,7 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 				FuncName: handler.FuncName,
 				Handle:   proxiedHandle,
 			}
-			if ed.proxiedHandlers == nil {
-				ed.proxiedHandlers = map[string][]messaging.MessageHandler[EventData]{eventTypeName: {proxiedHandler}}
-			} else if existsProxiedHandlers, ok := ed.proxiedHandlers[eventTypeName]; ok {
+			if existsProxiedHandlers, ok := ed.proxiedHandlers[eventTypeName]; ok {
 				existsProxiedHandlers = append(existsProxiedHandlers, proxiedHandler)
 				ed.proxiedHandlers[eventTypeName] = existsProxiedHandlers
 			} else {
@@ -187,7 +186,8 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 		err = mb.SendMail(mail)
 	}
 
-	if ed.notifier != nil {
+	// If there are no proxied handlers, avoid starting a notifier goroutine that would block waiting for a result.
+	if ed.notifier != nil && len(ed.proxiedHandlers) > 0 {
 		// notify event bus
 		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
 			go func() {
