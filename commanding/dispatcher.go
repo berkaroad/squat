@@ -72,6 +72,8 @@ func (cd *DefaultCommandDispatcher) Subscribe(commandTypeName string, handler Co
 
 	if cd.handlers == nil {
 		cd.handlers = map[string][]messaging.MessageHandler[CommandData]{commandTypeName: {messaging.MessageHandler[CommandData](handler)}}
+	} else if _, ok := cd.handlers[commandTypeName]; ok {
+		return
 	} else {
 		// One command type only mapping to one message handler. If exists, ignore it
 		cd.handlers[commandTypeName] = []messaging.MessageHandler[CommandData]{messaging.MessageHandler[CommandData](handler)}
