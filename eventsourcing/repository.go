@@ -190,7 +190,8 @@ func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error
 	if !aggregate.HasChanged() {
 		return domain.ErrAggregateNoChange
 	}
-	commandMeta.Extensions = commandMeta.Extensions.Set(messaging.ExtensionKeyAggregateChanged, "true")
+	commandMeta.Extensions = commandMeta.Extensions.Clone().
+		Set(messaging.ExtensionKeyAggregateChanged, "true")
 
 	logger := logging.Get(ctx)
 	eventStream := domain.EventStream{

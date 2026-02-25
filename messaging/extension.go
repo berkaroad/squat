@@ -12,6 +12,7 @@ const (
 	ExtensionKeyAggregateChanged      ExtensionKey = ExtensionKey(SysExtensionKeyPrefix) + "AggregateChanged"
 )
 
+// Extensions is not concurrent-safe.
 type Extensions map[string]string
 
 func (extensions Extensions) Clone() Extensions {

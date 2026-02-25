@@ -36,7 +36,8 @@ type CommandData struct {
 func (data *CommandData) SetCustomExtension(ctx context.Context, key string, val string) {
 	metadata := messaging.FromContext(ctx)
 	if metadata != nil && metadata.Category == MailCategory && !strings.HasPrefix(key, messaging.SysExtensionKeyPrefix) {
-		metadata.Extensions = metadata.Extensions.Set(messaging.ExtensionKey(key), val)
+		metadata.Extensions = metadata.Extensions.Clone().
+			Set(messaging.ExtensionKey(key), val)
 		data.Extensions = metadata.Extensions
 	}
 }

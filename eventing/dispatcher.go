@@ -173,7 +173,7 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 			StreamVersion: data.StreamVersion,
 			CommandID:     data.CommandID,
 			CommandType:   data.CommandType,
-			Extensions: messaging.Extensions(data.Extensions).
+			Extensions: messaging.Extensions(data.Extensions).Clone().
 				Set(messaging.ExtensionKeyFromMessageID, data.CommandID).
 				Set(messaging.ExtensionKeyFromMessageType, data.CommandType),
 		})
