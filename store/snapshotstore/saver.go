@@ -123,7 +123,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 					}
 				case <-time.After(checkInterval):
 					hasData := false
-					timeoutShardKeys := make([]uint8, 0)
+					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {
 							timeoutShardKeys = append(timeoutShardKeys, shardKey)

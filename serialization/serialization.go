@@ -65,7 +65,7 @@ func SerializeToText(serializer Serializer, v any) (string, error) {
 	if serializer == nil {
 		serializer = defaultTextSerializer
 	}
-	buf := bytes.NewBuffer(make([]byte, 0, 64))
+	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	err := serializer.Serialize(buf, v)
 	if err != nil {
 		return "", err

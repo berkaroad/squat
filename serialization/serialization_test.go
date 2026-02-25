@@ -22,7 +22,7 @@ func deserialize(t *testing.T, serializer Serializer) {
 		Map[Class1]()
 		Map[Class1]()
 		data1 := &Class1{ID: "agg1"}
-		buf := bytes.NewBuffer(make([]byte, 0, 64))
+		buf := bytes.NewBuffer(make([]byte, 0, 1024))
 		err := Serialize(serializer, buf, data1)
 		if err != nil {
 			t.Error("serialize *struct{} fail")
@@ -46,7 +46,7 @@ func deserialize(t *testing.T, serializer Serializer) {
 		Map[Class1]()
 		Map[Class1]()
 		data1 := Class1{ID: "agg1"}
-		buf := bytes.NewBuffer(make([]byte, 0, 64))
+		buf := bytes.NewBuffer(make([]byte, 0, 1024))
 		err := Serialize(serializer, buf, data1)
 		if err != nil {
 			t.Error("serialize struct{} fail")

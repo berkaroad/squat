@@ -107,7 +107,7 @@ func (cache *MemoryCache) Set(cacheKey string, data any, expiration time.Duratio
 
 	cache.writeCounter.Add(1)
 	logger := logging.Get(context.Background())
-	buf := bytes.NewBuffer(make([]byte, 0, 64))
+	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	if err := serialization.Serialize(cache.serializer, buf, data); err != nil {
 		logger.Error(fmt.Sprintf("serialize cache item fail: %v", err),
 			slog.String("cache-key", cacheKey),
