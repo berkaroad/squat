@@ -72,23 +72,15 @@ func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggreg
 	if p.GetMailboxName != nil {
 		mailboxName = p.GetMailboxName(aggregateID, aggregateTypeName)
 	}
-	mailboxCapacity := p.MailboxCapacity
-	if mailboxCapacity <= 0 {
-		mailboxCapacity = 1000
-	}
 
 	actual, loaded := p.mailboxes.LoadOrStore(mailboxName, &defaultMailbox[TMessage]{
 		name:               mailboxName,
 		autoReleaseTimeout: p.AutoReleaseTimeout,
-		receiverCh:         make(chan MailsWithResult[TMessage], mailboxCapacity),
 		handlers:           handlers,
-		logger: logging.Get(context.Background()).With(
-			slog.String("mailbox", mailboxName),
-		),
 	})
 	mb := actual.(*defaultMailbox[TMessage])
 	if !loaded {
-		mb.initialize(func(s string) {
+		mb.initialize(p.MailboxCapacity, func(s string) {
 			p.mailboxes.Delete(mailboxName)
 			p.removedCounter.Add(1)
 		})
@@ -105,8 +97,8 @@ func (p *DefaultMailboxProvider[TMessage]) Stats() MailBoxStatistic {
 }
 
 const (
-	statusActived int32 = iota
-	statusDisactived
+	statusDisactived int32 = iota
+	statusActived
 	statusDestoryed
 )
 
@@ -138,8 +130,17 @@ func (mb *defaultMailbox[TMessage]) SendMail(data MailsWithResult[TMessage]) err
 	return nil
 }
 
-func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
+func (mb *defaultMailbox[TMessage]) initialize(mailboxCapacity int, removeSelf func(string)) {
+	if mailboxCapacity <= 0 {
+		mailboxCapacity = 1000
+	}
+	mb.receiverCh = make(chan MailsWithResult[TMessage], mailboxCapacity)
+	mb.logger = logging.Get(context.Background()).With(
+		slog.String("mailbox", mb.name),
+	)
+	mb.status.Swap(statusActived)
 	mb.logger.Debug("mailbox initialized")
+
 	go func() {
 		autoReleaseTimeout := mb.autoReleaseTimeout
 		if autoReleaseTimeout <= 0 {
@@ -148,7 +149,10 @@ func (mb *defaultMailbox[TMessage]) initialize(removeSelf func(string)) {
 	loop:
 		for {
 			select {
-			case data := <-mb.receiverCh:
+			case data, ok := <-mb.receiverCh:
+				if !ok {
+					break loop
+				}
 				mb.processMails(data)
 			case <-time.After(autoReleaseTimeout):
 				if mb.status.CompareAndSwap(statusActived, statusDisactived) {
