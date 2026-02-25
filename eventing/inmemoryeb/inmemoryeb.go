@@ -81,7 +81,10 @@ func (eb *InMemoryEventBus) Start() {
 		loop:
 			for {
 				select {
-				case data := <-eb.receiverCh:
+				case data, ok := <-eb.receiverCh:
+					if !ok {
+						break loop
+					}
 					eb.dispatcher.Dispatch(data)
 				case <-time.After(time.Second):
 					if eb.status.Load() != 1 {

@@ -107,7 +107,10 @@ func (ep *DefaultEventPublisher) Start() {
 		loop:
 			for {
 				select {
-				case eventStream := <-ep.receiverCh:
+				case eventStream, ok := <-ep.receiverCh:
+					if !ok {
+						break loop
+					}
 					ep.processEventStream(eventStream)
 				case <-time.After(time.Second):
 					if ep.status.Load() != 1 {

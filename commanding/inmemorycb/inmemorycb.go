@@ -157,7 +157,10 @@ func (cb *InMemoryCommandBus) Start() {
 		loop:
 			for {
 				select {
-				case data := <-cb.receiverCh:
+				case data, ok := <-cb.receiverCh:
+					if !ok {
+						break loop
+					}
 					cb.dispatcher.Dispatch(data)
 				case <-time.After(time.Second):
 					if cb.status.Load() != 1 {
