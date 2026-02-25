@@ -93,7 +93,10 @@ func (saver *DefaultEventStoreSaver) Start() {
 		loop:
 			for {
 				select {
-				case data := <-saver.receiverCh:
+				case data, ok := <-saver.receiverCh:
+					if !ok {
+						break loop
+					}
 					shardKey := shardingAlgorithm(data.Data.AggregateID)
 					if _, ok := shardingMapping[shardKey]; !ok {
 						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
@@ -138,6 +141,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 						wg.Wait()
 					}
 					if !hasData && saver.status.Load() != 1 {
+						close(saver.receiverCh)
 						break loop
 					}
 				}

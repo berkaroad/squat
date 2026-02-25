@@ -110,7 +110,10 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 		loop:
 			for {
 				select {
-				case data := <-saver.receiverCh:
+				case data, ok := <-saver.receiverCh:
+					if !ok {
+						break loop
+					}
 					shardKey := shardingAlgorithm(data.AggregateID)
 					if _, ok := shardingMapping[shardKey]; !ok {
 						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)

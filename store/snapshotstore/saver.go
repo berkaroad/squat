@@ -94,7 +94,10 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 		loop:
 			for {
 				select {
-				case data := <-saver.receiverCh:
+				case data, ok := <-saver.receiverCh:
+					if !ok {
+						break loop
+					}
 					if data.SnapshotVersion < minVersionDiff {
 						continue
 					}
@@ -151,6 +154,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 						wg.Wait()
 					}
 					if !hasData && saver.status.Load() != 1 {
+						close(saver.receiverCh)
 						break loop
 					}
 				}
