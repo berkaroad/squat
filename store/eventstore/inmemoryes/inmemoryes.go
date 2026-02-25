@@ -9,7 +9,7 @@ import (
 	"github.com/berkaroad/squat/store/eventstore"
 )
 
-var instance *InMemoryEventStore = &InMemoryEventStore{SimulateTimeout: time.Millisecond * 20}
+var instance *InMemoryEventStore = &InMemoryEventStore{SimulateTimeout: time.Millisecond * 10 /* Simulate disk 100 iops */}
 
 func Default() *InMemoryEventStore {
 	return instance

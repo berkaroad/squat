@@ -8,7 +8,7 @@ import (
 	"github.com/berkaroad/squat/store/snapshotstore"
 )
 
-var instance *InMemorySnapshotStore = &InMemorySnapshotStore{SimulateTimeout: time.Millisecond * 20}
+var instance *InMemorySnapshotStore = &InMemorySnapshotStore{SimulateTimeout: time.Millisecond * 10 /* Simulate disk 100 iops */}
 
 func Default() *InMemorySnapshotStore {
 	return instance

@@ -8,7 +8,7 @@ import (
 	"github.com/berkaroad/squat/store/publishedstore"
 )
 
-var instance *InMemoryPublishedStore = &InMemoryPublishedStore{SimulateTimeout: time.Millisecond * 20}
+var instance *InMemoryPublishedStore = &InMemoryPublishedStore{SimulateTimeout: time.Millisecond * 10 /* Simulate disk 100 iops */}
 
 func Default() *InMemoryPublishedStore {
 	return instance
