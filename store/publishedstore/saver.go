@@ -97,7 +97,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = time.Second
+				batchInterval = 30 * time.Millisecond // can support 100 concurrent operations of sending command to single aggregate.
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
