@@ -186,8 +186,8 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 		err = mb.SendMail(mail)
 	}
 
-	// If there are no proxied handlers, avoid starting a notifier goroutine that would block waiting for a result.
-	if ed.notifier != nil && len(ed.proxiedHandlers) > 0 {
+	// If there are no proxied handlers, also can receive from resultCh with error 'missing message handler'.
+	if ed.notifier != nil {
 		// notify event bus
 		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
 			go func() {

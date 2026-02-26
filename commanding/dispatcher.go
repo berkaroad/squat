@@ -168,8 +168,8 @@ func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData) {
 		err = mb.SendMail(msg)
 	}
 
-	// Avoid starting a notifier goroutine if there are no proxied handlers; the channel would never receive a value.
-	if cd.notifier != nil && len(cd.proxiedHandlers) > 0 {
+	// If there are no proxied handlers, also can receive from resultCh with error 'missing message handler'.
+	if cd.notifier != nil {
 		// notify event bus
 		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
 			go func() {
