@@ -2,12 +2,9 @@ package eventsourcing
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/berkaroad/squat/domain"
@@ -16,128 +13,18 @@ import (
 	"github.com/berkaroad/squat/serialization"
 	"github.com/berkaroad/squat/store/eventstore"
 	"github.com/berkaroad/squat/store/publishedstore"
-	"github.com/berkaroad/squat/utilities/goroutine"
 	"github.com/berkaroad/squat/utilities/retrying"
 )
 
-type EventPublisher interface {
-	Publish(eventStream domain.EventStream)
-	Start()
-	Stop()
-}
-
-var _ EventPublisher = (*DefaultEventPublisher)(nil)
-
-type DefaultEventPublisher struct {
-	BufferSize int
+type eventPublisher struct {
 	eb         eventing.EventBus
 	es         eventstore.EventStore
 	ps         publishedstore.PublishedStore
 	pss        publishedstore.PublishedStoreSaver
 	serializer serialization.TextSerializer
-
-	initOnce    sync.Once
-	initialized bool
-	receiverCh  chan *domain.EventStream
-	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
 }
 
-func (ep *DefaultEventPublisher) Initialize(
-	eventBus eventing.EventBus,
-	eventStore eventstore.EventStore,
-	publishedStore publishedstore.PublishedStore,
-	publishedStoreSaver publishedstore.PublishedStoreSaver,
-	serializer serialization.TextSerializer,
-) *DefaultEventPublisher {
-	ep.initOnce.Do(func() {
-		if eventBus == nil {
-			panic("field 'eventBus' is null")
-		}
-		if eventStore == nil {
-			panic("field 'eventStore' is null")
-		}
-		if publishedStore == nil {
-			panic("field 'publishedStore' is null")
-		}
-		bufferSize := ep.BufferSize
-		if bufferSize <= 0 {
-			bufferSize = 1000
-		}
-		ep.eb = eventBus
-		ep.es = eventStore
-		ep.ps = publishedStore
-		ep.pss = publishedStoreSaver
-		ep.serializer = serializer
-
-		ep.receiverCh = make(chan *domain.EventStream, bufferSize)
-		ep.initialized = true
-	})
-	return ep
-}
-
-func (ep *DefaultEventPublisher) Publish(eventStream domain.EventStream) {
-	if !ep.initialized {
-		panic("not initialized")
-	}
-
-	if ep.status.Load() != 1 {
-		logger := logging.Get(context.TODO())
-		logger.Warn("'DefaultEventPublisher' has stopped")
-		return
-	}
-
-	defer func() {
-		if recover() != nil {
-			logger := logging.Get(context.TODO())
-			logger.Warn("'DefaultEventPublisher' has stopped")
-		}
-	}()
-
-	ep.receiverCh <- &eventStream
-}
-
-func (ep *DefaultEventPublisher) Start() {
-	if !ep.initialized {
-		panic("not initialized")
-	}
-
-	if ep.status.CompareAndSwap(0, 1) {
-		go func() {
-
-		loop:
-			for {
-				select {
-				case eventStream, ok := <-ep.receiverCh:
-					if !ok {
-						break loop
-					}
-					ep.processEventStream(eventStream)
-				case <-time.After(time.Second):
-					if ep.status.Load() != 1 {
-						break loop
-					}
-				}
-			}
-		}()
-	}
-}
-
-func (ep *DefaultEventPublisher) Stop() {
-	if !ep.initialized {
-		panic("not initialized")
-	}
-
-	ep.status.CompareAndSwap(1, 2)
-	time.Sleep(time.Second)
-	for len(ep.receiverCh) > 0 {
-		time.Sleep(time.Second)
-	}
-	<-goroutine.Wait()
-	close(ep.receiverCh)
-	ep.status.CompareAndSwap(2, 0)
-}
-
-func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStream) {
+func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 	baseLogger := logging.Get(context.Background())
 	eventBus := ep.eb
 	eventStore := ep.es
@@ -180,9 +67,9 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 		var err error
 		unpublishedEventStreams, err = ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
 		if err != nil {
-			dataBytes, _ := json.Marshal(unpublishedEventStreamDatas)
+			textData, _ := serialization.SerializeToText(ep.serializer, unpublishedEventStreamDatas)
 			logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
-				slog.Any("unpublished-eventstream", dataBytes),
+				slog.String("unpublished-eventstream", textData),
 			)
 			return
 		}
@@ -202,9 +89,9 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 		var err error
 		unpublishedEventStreams, err = ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
 		if err != nil {
-			dataBytes, _ := json.Marshal(unpublishedEventStreamDatas)
+			textData, _ := serialization.SerializeToText(ep.serializer, unpublishedEventStreamDatas)
 			logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
-				slog.Any("unpublished-eventstream", dataBytes),
+				slog.String("unpublished-eventstream", textData),
 			)
 			return
 		}
@@ -260,7 +147,7 @@ func (ep *DefaultEventPublisher) processEventStream(eventStream *domain.EventStr
 
 	if publishedVersion == eventStream.StreamVersion-1 {
 		retrying.RetryForever(func() error {
-			return eventBus.Publish(*eventStream)
+			return eventBus.Publish(eventStream)
 		}, time.Second, func(retryCount int, err error) bool {
 			if retryCount == 0 {
 				logger.Error(fmt.Sprintf("publish eventstream fail: %v", err))

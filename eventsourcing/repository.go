@@ -11,10 +11,12 @@ import (
 
 	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/domain"
+	"github.com/berkaroad/squat/eventing"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 	"github.com/berkaroad/squat/serialization"
 	"github.com/berkaroad/squat/store/eventstore"
+	"github.com/berkaroad/squat/store/publishedstore"
 	"github.com/berkaroad/squat/store/snapshotstore"
 )
 
@@ -28,7 +30,7 @@ type EventSourcedRepository[T EventSourcedAggregate] struct {
 	ess              eventstore.EventStoreSaver
 	ss               snapshotstore.SnapshotStore
 	sss              snapshotstore.SnapshotStoreSaver
-	ep               EventPublisher
+	ep               *eventPublisher
 	cache            AggregateSnapshotCache
 	serializer       serialization.TextSerializer
 	binarySerializer serialization.BinarySerializer
@@ -40,14 +42,17 @@ type EventSourcedRepository[T EventSourcedAggregate] struct {
 }
 
 func (r *EventSourcedRepository[T]) Initialize(
+	eventBus eventing.EventBus,
 	eventStore eventstore.EventStore,
 	eventStoreSaver eventstore.EventStoreSaver,
+	publishedStore publishedstore.PublishedStore,
+	publishedStoreSaver publishedstore.PublishedStoreSaver,
 	snapshotStore snapshotstore.SnapshotStore,
 	snapshotStoreSaver snapshotstore.SnapshotStoreSaver,
-	eventPublisher EventPublisher,
 	cache AggregateSnapshotCache,
 	serializer serialization.TextSerializer,
 	binarySerializer serialization.BinarySerializer,
+
 ) *EventSourcedRepository[T] {
 	r.initOnce.Do(func() {
 		typ := reflect.TypeOf((*T)(nil)).Elem()
@@ -59,18 +64,27 @@ func (r *EventSourcedRepository[T]) Initialize(
 			panic("typeparam 'T' from 'EventSourcedRepository[T]' should be a pointer to struct")
 		}
 
+		if eventBus == nil {
+			panic("param 'eventBus' is null")
+		}
 		if eventStore == nil {
 			panic("param 'eventStore' is null")
 		}
-		if eventPublisher == nil {
-			panic("param 'eventPublisher' is null")
+		if publishedStore == nil {
+			panic("param 'publishedStore' is null")
 		}
 
 		r.es = eventStore
 		r.ess = eventStoreSaver
 		r.ss = snapshotStore
 		r.sss = snapshotStoreSaver
-		r.ep = eventPublisher
+		r.ep = &eventPublisher{
+			eb:         eventBus,
+			es:         eventStore,
+			ps:         publishedStore,
+			pss:        publishedStoreSaver,
+			serializer: serializer,
+		}
 		r.cache = cache
 		r.serializer = serializer
 		r.binarySerializer = binarySerializer
