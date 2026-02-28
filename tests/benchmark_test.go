@@ -35,15 +35,16 @@ func BenchmarkAccount(b *testing.B) {
 	}))
 	slog.SetDefault(logger)
 
-	var mhrn = inmemorymhrn.Default()
+	var notifier messaging.MessageHandleResultNotifier = inmemorymhrn.Default()
+	var watcher messaging.MessageHandleResultWatcher = notifier.(messaging.MessageHandleResultWatcher)
 
 	var cd commanding.CommandDispatcher = (&commanding.DefaultCommandDispatcher{}).
 		Initialize(&messaging.DefaultMailboxProvider[commanding.CommandData]{
 			MailboxCapacity:    1000,
 			GetMailboxName:     func(aggregateID, aggregateTypeName string) string { return aggregateID },
 			AutoReleaseTimeout: 30 * time.Second,
-		}, mhrn)
-	var cb commanding.CommandBus = inmemorycb.Default().Initialize(cd, mhrn)
+		}, notifier)
+	var cb commanding.CommandBus = inmemorycb.Default().Initialize(cd, watcher)
 	var commandprocessor commanding.CommandProcessor = cb.(commanding.CommandProcessor)
 
 	var ed eventing.EventDispatcher = (&eventing.DefaultEventDispatcher{}).
@@ -51,7 +52,7 @@ func BenchmarkAccount(b *testing.B) {
 			MailboxCapacity:    1000,
 			GetMailboxName:     func(aggregateID, aggregateTypeName string) string { return aggregateID },
 			AutoReleaseTimeout: 30 * time.Second,
-		}, mhrn)
+		}, notifier)
 	var eb eventing.EventBus = inmemoryeb.Default().Initialize(ed)
 	var eventprocessor eventing.EventProcessor = eb.(eventing.EventProcessor)
 

@@ -26,7 +26,7 @@ type InMemoryCommandBus struct {
 	BufferSize            int
 	NoticeServiceEndpoint string
 	dispatcher            commanding.CommandDispatcher
-	resultWatcher         messaging.MessageHandleResultWatcher
+	watcher               messaging.MessageHandleResultWatcher
 
 	initOnce    sync.Once
 	initialized bool
@@ -34,20 +34,20 @@ type InMemoryCommandBus struct {
 	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
 }
 
-func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher, resultWatcher messaging.MessageHandleResultWatcher) *InMemoryCommandBus {
+func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher, watcher messaging.MessageHandleResultWatcher) *InMemoryCommandBus {
 	cb.initOnce.Do(func() {
 		if dispatcher == nil {
 			dispatcher = &commanding.DefaultCommandDispatcher{}
 		}
-		if resultWatcher == nil {
-			panic("param 'resultWatcher' is null")
+		if watcher == nil {
+			panic("param 'watcher' is null")
 		}
 		bufferSize := cb.BufferSize
 		if bufferSize <= 0 {
 			bufferSize = 1000
 		}
 		cb.dispatcher = dispatcher
-		cb.resultWatcher = resultWatcher
+		cb.watcher = watcher
 		cb.receiverCh = make(chan *commanding.CommandData, bufferSize)
 		cb.initialized = true
 	})
@@ -98,8 +98,8 @@ func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Comman
 
 	eventMetadata := messaging.FromContext(ctx)
 	if eventMetadata == nil {
-		fromCommandWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
-		fromEventWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
+		fromCommandWatchItem := cb.watcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
+		fromEventWatchItem := cb.watcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
 
 		cb.receiverCh <- &commanding.CommandData{
 			Command:    cmd,
