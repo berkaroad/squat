@@ -64,16 +64,6 @@ func (cb *InMemoryCommandBus) Send(ctx context.Context, cmd commanding.Command) 
 		logger.Warn("'InMemoryCommandBus' has stopped")
 		return commanding.ErrStoppedCommandBus
 	}
-
-	defer func() error {
-		if recover() != nil {
-			logger := logging.Get(ctx)
-			logger.Warn("'InMemoryCommandBus' has stopped")
-			return commanding.ErrStoppedCommandBus
-		}
-		return nil
-	}()
-
 	eventMetadata := messaging.FromContext(ctx)
 	if eventMetadata == nil {
 		cb.receiverCh <- &commanding.CommandData{
@@ -111,14 +101,6 @@ func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Comman
 		fromCommandWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
 		fromEventWatchItem := cb.resultWatcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
 
-		defer func() (*commanding.CommandHandleResult, error) {
-			if recover() != nil {
-				logger := logging.Get(ctx)
-				logger.Warn("'InMemoryCommandBus' has stopped")
-				return nil, commanding.ErrStoppedCommandBus
-			}
-			return nil, nil
-		}()
 		cb.receiverCh <- &commanding.CommandData{
 			Command:    cmd,
 			Extensions: map[string]string{string(messaging.ExtensionKeyNoticeServiceEndpoint): cb.NoticeServiceEndpoint},
@@ -128,14 +110,7 @@ func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Comman
 		if eventMetadata.Category == commanding.MailCategory {
 			panic("'InMemoryCommandBus.Execute(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
 		}
-		defer func() (*commanding.CommandHandleResult, error) {
-			if recover() != nil {
-				logger := logging.Get(ctx)
-				logger.Warn("'InMemoryCommandBus' has stopped")
-				return nil, commanding.ErrStoppedCommandBus
-			}
-			return nil, nil
-		}()
+
 		cb.receiverCh <- &commanding.CommandData{
 			Command: cmd,
 			Extensions: eventMetadata.Extensions.Clone().
@@ -153,6 +128,11 @@ func (cb *InMemoryCommandBus) Start() {
 	}
 
 	if cb.status.CompareAndSwap(0, 1) {
+		bufferSize := cb.BufferSize
+		if bufferSize <= 0 {
+			bufferSize = 1000
+		}
+		cb.receiverCh = make(chan *commanding.CommandData, bufferSize)
 		go func() {
 		loop:
 			for {

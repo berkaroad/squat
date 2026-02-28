@@ -39,7 +39,7 @@ type DefaultEventStoreSaver struct {
 func (saver *DefaultEventStoreSaver) Initialize(eventStore EventStore) *DefaultEventStoreSaver {
 	saver.initOnce.Do(func() {
 		if eventStore == nil {
-			panic("field 'eventStore' is null")
+			panic("param 'eventStore' is null")
 		}
 		batchSize := saver.BatchSize
 		if batchSize <= 0 {
@@ -76,6 +76,11 @@ func (saver *DefaultEventStoreSaver) Start() {
 	}
 
 	if saver.status.CompareAndSwap(0, 1) {
+		batchSize := saver.BatchSize
+		if batchSize <= 0 {
+			batchSize = 100
+		}
+		saver.receiverCh = make(chan eventStreamDataWithResult, batchSize)
 		go func() {
 			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
@@ -115,7 +120,6 @@ func (saver *DefaultEventStoreSaver) Start() {
 						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
 					}
 				case <-time.After(checkInterval):
-					hasData := false
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {
@@ -128,7 +132,6 @@ func (saver *DefaultEventStoreSaver) Start() {
 							delete(shardingTimeMapping, shardKey)
 							datas := shardingMapping[shardKey]
 							if len(datas) > 0 {
-								hasData = true
 								shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
 								wg.Add(1)
 								go func(shardKey uint8, datas map[string]eventStreamDataWithResult) {
@@ -140,8 +143,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 						}
 						wg.Wait()
 					}
-					if !hasData && saver.status.Load() != 1 {
-						close(saver.receiverCh)
+					if saver.status.Load() != 1 {
 						break loop
 					}
 				}
@@ -160,6 +162,7 @@ func (saver *DefaultEventStoreSaver) Stop() {
 	for len(saver.receiverCh) > 0 {
 		time.Sleep(time.Second)
 	}
+	close(saver.receiverCh)
 	<-goroutine.Wait()
 	saver.status.CompareAndSwap(2, 0)
 }

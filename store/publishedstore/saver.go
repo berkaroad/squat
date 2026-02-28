@@ -93,11 +93,15 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 	}
 
 	if saver.status.CompareAndSwap(0, 1) {
+		batchSize := saver.BatchSize
+		if batchSize <= 0 {
+			batchSize = 100
+		}
+		saver.receiverCh = make(chan *PublishedEventStreamRef, batchSize)
 		go func() {
-			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = 30 * time.Millisecond // can support 100 concurrent operations of sending command to single aggregate.
+				batchInterval = 30 * time.Millisecond
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
@@ -130,7 +134,6 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
 					}
 				case <-time.After(checkInterval):
-					hasData := false
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {
@@ -143,7 +146,6 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 							delete(shardingTimeMapping, shardKey)
 							datas := shardingMapping[shardKey]
 							if len(datas) > 0 {
-								hasData = true
 								shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
 								wg.Add(1)
 								go func(shardKey uint8, datas map[string]*PublishedEventStreamRef) {
@@ -155,8 +157,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 						}
 						wg.Wait()
 					}
-					if !hasData && saver.status.Load() != 1 {
-						close(saver.receiverCh)
+					if saver.status.Load() != 1 {
 						break loop
 					}
 				}
@@ -175,6 +176,7 @@ func (saver *DefaultPublishedStoreSaver) Stop() {
 	for len(saver.receiverCh) > 0 {
 		time.Sleep(time.Second)
 	}
+	close(saver.receiverCh)
 	<-goroutine.Wait()
 	saver.status.CompareAndSwap(2, 0)
 }

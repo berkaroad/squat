@@ -72,6 +72,11 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 	}
 
 	if saver.status.CompareAndSwap(0, 1) {
+		batchSize := saver.BatchSize
+		if batchSize <= 0 {
+			batchSize = 100
+		}
+		saver.receiverCh = make(chan *AggregateSnapshotData, batchSize)
 		go func() {
 			minVersionDiff := saver.TakeSnapshotMinVersionDiff
 			if minVersionDiff <= 0 {
@@ -125,7 +130,6 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 						shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData)
 					}
 				case <-time.After(checkInterval):
-					hasData := false
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {
@@ -138,7 +142,6 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 							delete(shardingTimeMapping, shardKey)
 							datas := shardingMapping[shardKey]
 							if len(datas) > 0 {
-								hasData = true
 								for aggrID := range shardingMapping[shardKey] {
 									delete(snapshotVersionDiffMapping, aggrID)
 								}
@@ -153,8 +156,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 						}
 						wg.Wait()
 					}
-					if !hasData && saver.status.Load() != 1 {
-						close(saver.receiverCh)
+					if saver.status.Load() != 1 {
 						break loop
 					}
 				}
@@ -173,6 +175,7 @@ func (saver *DefaultSnapshotStoreSaver) Stop() {
 	for len(saver.receiverCh) > 0 {
 		time.Sleep(time.Second)
 	}
+	close(saver.receiverCh)
 	<-goroutine.Wait()
 	saver.status.CompareAndSwap(2, 0)
 }

@@ -58,15 +58,6 @@ func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
 		return eventing.ErrStoppedEventBus
 	}
 
-	defer func() error {
-		if recover() != nil {
-			logger := logging.Get(context.TODO())
-			logger.Warn("'InMemoryEventBus' has stopped")
-			return eventing.ErrStoppedEventBus
-		}
-		return nil
-	}()
-
 	eb.receiverCh <- &es
 	return nil
 }
@@ -77,6 +68,11 @@ func (eb *InMemoryEventBus) Start() {
 	}
 
 	if eb.status.CompareAndSwap(0, 1) {
+		bufferSize := eb.BufferSize
+		if bufferSize <= 0 {
+			bufferSize = 1000
+		}
+		eb.receiverCh = make(chan *domain.EventStream, bufferSize)
 		go func() {
 		loop:
 			for {
