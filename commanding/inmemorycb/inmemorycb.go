@@ -20,7 +20,7 @@ func Default() *InMemoryCommandBus {
 }
 
 var _ commanding.CommandBus = (*InMemoryCommandBus)(nil)
-var _ commanding.CommandProcess = (*InMemoryCommandBus)(nil)
+var _ commanding.CommandProcessor = (*InMemoryCommandBus)(nil)
 
 type InMemoryCommandBus struct {
 	BufferSize            int

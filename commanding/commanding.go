@@ -23,7 +23,7 @@ type CommandBus interface {
 	Execute(ctx context.Context, cmd Command) (*CommandHandleResult, error)
 }
 
-type CommandProcess interface {
+type CommandProcessor interface {
 	Start()
 	Stop()
 }
