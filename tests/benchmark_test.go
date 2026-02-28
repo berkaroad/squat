@@ -35,6 +35,9 @@ func BenchmarkAccount(b *testing.B) {
 	}))
 	slog.SetDefault(logger)
 
+	var textSerializer serialization.TextSerializer = serialization.DefaultText()
+	var binarySerializer serialization.BinarySerializer = serialization.DefaultBinary()
+
 	var notifier messaging.MessageHandleResultNotifier = inmemorymhrn.Default()
 	var watcher messaging.MessageHandleResultWatcher = notifier.(messaging.MessageHandleResultWatcher)
 
@@ -77,7 +80,9 @@ func BenchmarkAccount(b *testing.B) {
 			SnapshotEnabled: true,
 			CacheEnabled:    true,
 			CacheExpiration: time.Minute * 2,
-		}).Initialize(eb, es, ess, ps, pss, ss, sss, (&caching.MemoryCache{CleanInterval: time.Second * 30}).Initialize(serialization.DefaultBinary()), serialization.DefaultText(), serialization.DefaultBinary()),
+		}).Initialize(eb, es, ess, ps, pss, ss, sss,
+			(&caching.MemoryCache{CleanInterval: time.Second * 30}).Initialize(binarySerializer),
+			textSerializer, binarySerializer),
 	})
 	ed.SubscribeMulti(&AccountViewGenerator{})
 	ed.AddProxy(&IdempotentEventHandlerProxy{})
