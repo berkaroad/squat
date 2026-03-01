@@ -82,10 +82,9 @@ func (saver *DefaultEventStoreSaver) Start() {
 		}
 		saver.receiverCh = make(chan eventStreamDataWithResult, batchSize)
 		go func() {
-			batchSize := cap(saver.receiverCh)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = 30 * time.Millisecond // can support 100 concurrent operations of sending command to single aggregate.
+				batchInterval = 100 * time.Millisecond
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
@@ -104,7 +103,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 					}
 					shardKey := shardingAlgorithm(data.Data.AggregateID)
 					if _, ok := shardingMapping[shardKey]; !ok {
-						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
+						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult, batchSize)
 					}
 					if _, ok := shardingTimeMapping[shardKey]; !ok {
 						shardingTimeMapping[shardKey] = time.Now()
@@ -117,7 +116,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 					if len(shardingMapping[shardKey]) >= batchSize {
 						delete(shardingTimeMapping, shardKey)
 						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
-						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
+						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult, batchSize)
 					}
 				case <-time.After(checkInterval):
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
@@ -132,7 +131,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 							delete(shardingTimeMapping, shardKey)
 							datas := shardingMapping[shardKey]
 							if len(datas) > 0 {
-								shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult)
+								shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult, batchSize)
 								wg.Add(1)
 								go func(shardKey uint8, datas map[string]eventStreamDataWithResult) {
 									defer wg.Done()

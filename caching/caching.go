@@ -146,10 +146,7 @@ func (cache *MemoryCache) cleanExpired() {
 		return
 	}
 	go func() {
-		cleanInterval := cache.CleanInterval
-		if cleanInterval < time.Second*3 {
-			cleanInterval = time.Second * 3
-		}
+		cleanInterval := max(cache.CleanInterval, time.Second*3)
 		<-time.After(cleanInterval)
 
 		stat := cache.Stats()

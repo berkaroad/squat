@@ -64,7 +64,7 @@ func BenchmarkAccount(b *testing.B) {
 	var ps = inmemoryps.Default()
 	var pss = (&publishedstore.DefaultPublishedStoreSaver{}).Initialize(ps)
 	var ss = inmemoryss.Default()
-	var sss = (&snapshotstore.DefaultSnapshotStoreSaver{}).Initialize(ss)
+	var sss = (&snapshotstore.DefaultSnapshotStoreSaver{TakeSnapshotMinVersionDiff: 1}).Initialize(ss)
 
 	// business initialization
 	serialization.Map[AccountSnapshot]()
@@ -84,6 +84,7 @@ func BenchmarkAccount(b *testing.B) {
 			(&caching.MemoryCache{CleanInterval: time.Second * 30}).Initialize(binarySerializer),
 			textSerializer, binarySerializer),
 	})
+	cd.AddProxy(&IdempotentCommandHandlerProxy{})
 	ed.SubscribeMulti(&AccountViewGenerator{})
 	ed.AddProxy(&IdempotentEventHandlerProxy{})
 

@@ -9,10 +9,10 @@ Domain-Driven Design framework, event sourcing supported, base on EDA and CQRS.
   Save eventstream when aggregate changed. And also can been restored from eventstreams and snapshot.
 
   * 1) Save `eventstream` to `eventstore`
+  
+  * 2) Publish `eventstream` to `eventbus`
 
-  * 2) Publish `eventstream` to `eventpublisher`
-
-  * 3) Support taking snapshot for `aggregate` to `snapshotstore`
+  * 3) Take snapshot for `aggregate` to `snapshotstore`
 
 * 2. EDA
 

@@ -101,7 +101,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 		go func() {
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = 30 * time.Millisecond
+				batchInterval = 100 * time.Millisecond
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
@@ -120,7 +120,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 					}
 					shardKey := shardingAlgorithm(data.AggregateID)
 					if _, ok := shardingMapping[shardKey]; !ok {
-						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
+						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef, batchSize)
 					}
 					if _, ok := shardingTimeMapping[shardKey]; !ok {
 						shardingTimeMapping[shardKey] = time.Now()
@@ -131,7 +131,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 					if len(shardingMapping[shardKey]) >= batchSize {
 						delete(shardingTimeMapping, shardKey)
 						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
-						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
+						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef, batchSize)
 					}
 				case <-time.After(checkInterval):
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
@@ -146,7 +146,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 							delete(shardingTimeMapping, shardKey)
 							datas := shardingMapping[shardKey]
 							if len(datas) > 0 {
-								shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef)
+								shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef, batchSize)
 								wg.Add(1)
 								go func(shardKey uint8, datas map[string]*PublishedEventStreamRef) {
 									defer wg.Done()
