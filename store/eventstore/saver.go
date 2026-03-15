@@ -41,12 +41,7 @@ func (saver *DefaultEventStoreSaver) Initialize(eventStore EventStore) *DefaultE
 		if eventStore == nil {
 			panic("param 'eventStore' is null")
 		}
-		batchSize := saver.BatchSize
-		if batchSize <= 0 {
-			batchSize = 100
-		}
 		saver.es = eventStore
-		saver.receiverCh = make(chan eventStreamDataWithResult, batchSize)
 		saver.initialized = true
 	})
 	return saver
@@ -80,7 +75,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 		if batchSize <= 0 {
 			batchSize = 100
 		}
-		saver.receiverCh = make(chan eventStreamDataWithResult, batchSize)
+		saver.receiverCh = make(chan eventStreamDataWithResult, batchSize*2)
 		go func() {
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
@@ -175,7 +170,7 @@ func (saver *DefaultEventStoreSaver) batchSave(ctx context.Context, store EventS
 	err := retrying.Retry(func() error {
 		return store.AppendEventStream(ctx, datas)
 	}, time.Second, func(retryCount int, err error) bool {
-		if _, ok := err.(net.Error); ok {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout(){
 			return true
 		}
 		return false

@@ -21,6 +21,7 @@ type InMemoryEventStore struct {
 	SimulateTimeout time.Duration
 
 	eventstreamMapper sync.Map
+	commandIds        sync.Map
 }
 
 func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregateID string, startVersion, endVersion int) (eventstore.EventStreamDataSlice, error) {
@@ -46,13 +47,35 @@ func (s *InMemoryEventStore) QueryEventStreamList(ctx context.Context, aggregate
 
 func (s *InMemoryEventStore) AppendEventStream(ctx context.Context, datas eventstore.EventStreamDataSlice) error {
 	time.Sleep(s.SimulateTimeout)
+	localCommandIDs := make(map[string]struct{})
+	localAggregateIDs := make(map[string]struct{})
 	for _, data := range datas {
+		if _, ok := s.commandIds.Load(data.CommandID); ok {
+			return eventstore.NewErrDuplicateCommandID(data.CommandID)
+		}
+
+		if _, ok := localCommandIDs[data.CommandID]; ok {
+			return fmt.Errorf("%w: command-id %s", eventstore.ErrEventStreamConcurrencyConflict, data.CommandID)
+		}
+		localCommandIDs[data.CommandID] = struct{}{}
+
+		if _, ok := localAggregateIDs[data.AggregateID]; ok {
+			return fmt.Errorf("%w: aggregate-id %s", eventstore.ErrEventStreamConcurrencyConflict, data.AggregateID)
+		}
+		localAggregateIDs[data.AggregateID] = struct{}{}
+	}
+
+	for _, data := range datas {
+		if _, loaded := s.commandIds.LoadOrStore(data.CommandID, struct{}{}); loaded {
+			return eventstore.NewErrDuplicateCommandID(data.CommandID)
+		}
 		eventStreamDatas := make(eventstore.EventStreamDataSlice, 0)
 		eventstreamDatasObj, ok := s.eventstreamMapper.Load(data.AggregateID)
 		if ok {
 			eventStreamDatas = eventstreamDatasObj.(eventstore.EventStreamDataSlice)
 		}
 		if len(eventStreamDatas)+1 != data.StreamVersion {
+			s.commandIds.Delete(data.CommandID)
 			return fmt.Errorf("%w: expected is %d, actual is %d", eventstore.ErrUnexpectedVersion, len(eventStreamDatas)+1, data.StreamVersion)
 		}
 		eventStreamDatas = append(eventStreamDatas, data)

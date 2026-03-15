@@ -14,9 +14,14 @@ type EventBus interface {
 	Publish(es domain.EventStream) error
 }
 
+type EventProcessorStatistic struct {
+	FetchedCount int64
+}
+
 type EventProcessor interface {
 	Start()
 	Stop()
+	Stats() EventProcessorStatistic
 }
 
 type EventHandleFunc = messaging.MessageHandleFunc[EventData]

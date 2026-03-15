@@ -21,7 +21,7 @@ type EventDispatcher interface {
 	Subscribe(eventTypeName string, handler EventHandler)
 	SubscribeMulti(handlerGroup EventHandlerGroup)
 	AddProxy(proxies ...EventHandlerProxy)
-	Dispatch(data *domain.EventStream)
+	Dispatch(data *domain.EventStream, callback func(messaging.MessageHandleResult))
 }
 
 var _ EventDispatcher = (*DefaultEventDispatcher)(nil)
@@ -151,7 +151,7 @@ func (ed *DefaultEventDispatcher) AddProxy(proxies ...EventHandlerProxy) {
 	}
 }
 
-func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
+func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream, callback func(messaging.MessageHandleResult)) {
 	if !ed.initialized {
 		panic("not initialized")
 	}
@@ -187,12 +187,15 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 	}
 
 	// If there are no proxied handlers, also can receive from resultCh with error 'missing message handler'.
-	if ed.notifier != nil {
-		// notify event bus
-		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
-			go func() {
+	go func() {
+		result := <-resultCh
+		if callback != nil {
+			callback(result)
+		}
+		if ed.notifier != nil {
+			// notify command bus
+			if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
 				logger := logging.Get(context.Background())
-				result := <-resultCh
 				ed.notifier.Notify(noticeServiceEndpoint, data.CommandID, CommandHandleResultProvider, result)
 				logger.Info(fmt.Sprintf("notify event handle result from %s", CommandHandleResultProvider),
 					slog.String("command-id", data.CommandID),
@@ -201,7 +204,7 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream) {
 					slog.String("aggregate-type", data.AggregateType),
 					slog.Int("stream-version", data.StreamVersion),
 				)
-			}()
+			}
 		}
-	}
+	}()
 }

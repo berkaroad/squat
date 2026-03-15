@@ -61,20 +61,46 @@ func Deserialize(serializer Serializer, typeName string, r io.Reader) (any, erro
 	return v, err
 }
 
-func SerializeToText(serializer Serializer, v any) (string, error) {
+func SerializeToBytes(serializer Serializer, v any) ([]byte, error) {
 	if serializer == nil {
 		serializer = defaultTextSerializer
 	}
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	err := serializer.Serialize(buf, v)
 	if err != nil {
+		return nil, err
+	}
+	data := buf.Bytes()
+	return data, nil
+}
+
+func DeserializeFromBytes(serializer Serializer, typeName string, data []byte) (any, error) {
+	if serializer == nil {
+		serializer = defaultTextSerializer
+	}
+	vInterface, err := NewFromTypeName(typeName)
+	if err != nil {
+		return nil, err
+	}
+
+	v := vInterface.Interface()
+	err = serializer.Deserialize(bytes.NewReader(data), v)
+	return v, err
+}
+
+func SerializeToText(serializer Serializer, v any) (string, error) {
+	if serializer == nil {
+		serializer = defaultTextSerializer
+	}
+	buf, err := SerializeToBytes(serializer, v)
+	if err != nil {
 		return "", err
 	}
 	var data string
 	if _, ok := serializer.(TextSerializer); ok {
-		data = buf.String()
+		data = string(buf)
 	} else {
-		data = base64.StdEncoding.EncodeToString(buf.Bytes())
+		data = base64.StdEncoding.EncodeToString(buf)
 	}
 	return data, nil
 }
@@ -82,10 +108,6 @@ func SerializeToText(serializer Serializer, v any) (string, error) {
 func DeserializeFromText(serializer Serializer, typeName string, text string) (any, error) {
 	if serializer == nil {
 		serializer = defaultTextSerializer
-	}
-	vInterface, err := NewFromTypeName(typeName)
-	if err != nil {
-		return nil, err
 	}
 
 	var data []byte
@@ -98,7 +120,6 @@ func DeserializeFromText(serializer Serializer, typeName string, text string) (a
 		}
 	}
 
-	v := vInterface.Interface()
-	err = serializer.Deserialize(bytes.NewReader(data), v)
+	v, err := DeserializeFromBytes(serializer, typeName, data)
 	return v, err
 }

@@ -26,6 +26,16 @@ type EventStreamData struct {
 	Extensions    map[string]string `json:"extensions" bson:"extensions"`
 }
 
+func (esd *EventStreamData) Reset() {
+	esd.AggregateID = ""
+	esd.AggregateType = ""
+	esd.StreamVersion = 0
+	esd.Events = nil
+	esd.CommandID = ""
+	esd.CommandType = ""
+	esd.Extensions = nil
+}
+
 type EventStreamDataSlice []EventStreamData
 
 func (l EventStreamDataSlice) Len() int { return len(l) }

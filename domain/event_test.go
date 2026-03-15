@@ -41,17 +41,6 @@ func TestDomainEventBase_EventID(t *testing.T) {
 	}
 }
 
-func TestDomainEventBase_TypeName(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("NewDomainEventBase.TypeName() should panic")
-		}
-	}()
-
-	event := NewDomainEventBase(strconv.Itoa(rand.Int()))
-	event.TypeName()
-}
-
 func TestDomainEventBase_OccurTime(t *testing.T) {
 	events := make([]DomainEventBase, 0)
 	for i := 0; i < 10; i++ {
@@ -72,7 +61,7 @@ func TestSortEventStreamSlice(t *testing.T) {
 			AggregateID:   "001",
 			AggregateType: "fruit",
 			StreamVersion: i,
-			Events:        []DomainEvent{NewDomainEventBase(strconv.Itoa(rand.Int()))},
+			Events:        []DomainEvent{&sampleDomainEvent{DomainEventBase: NewDomainEventBase(strconv.Itoa(rand.Int()))}},
 			CommandID:     "command-001",
 			CommandType:   "commandType1",
 		})
@@ -84,4 +73,15 @@ func TestSortEventStreamSlice(t *testing.T) {
 			t.Errorf("eventstreams should sort by 'StreamVersion")
 		}
 	}
+}
+
+var _ DomainEvent = (*sampleDomainEvent)(nil)
+
+type sampleDomainEvent struct {
+	DomainEventBase
+}
+
+// TypeName implements [DomainEvent].
+func (s *sampleDomainEvent) TypeName() string {
+	return "sampleDomainEvent"
 }

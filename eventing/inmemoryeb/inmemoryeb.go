@@ -1,14 +1,12 @@
 package inmemoryeb
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/eventing"
-	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/utilities/goroutine"
 )
 
@@ -27,8 +25,11 @@ type InMemoryEventBus struct {
 
 	initOnce    sync.Once
 	initialized bool
-	receiverCh  chan *domain.EventStream
-	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
+	mqCh        chan *domain.EventStream // simulate a real message queue.
+	status      atomic.Int32             // 0: stop, 1: running, 2: stopping
+
+	// statistics
+	fetchedCount int64
 }
 
 func (eb *InMemoryEventBus) Initialize(dispatcher eventing.EventDispatcher) *InMemoryEventBus {
@@ -41,7 +42,7 @@ func (eb *InMemoryEventBus) Initialize(dispatcher eventing.EventDispatcher) *InM
 			bufferSize = 1000
 		}
 		eb.dispatcher = dispatcher
-		eb.receiverCh = make(chan *domain.EventStream, bufferSize)
+		eb.mqCh = make(chan *domain.EventStream, bufferSize)
 		eb.initialized = true
 	})
 	return eb
@@ -52,13 +53,7 @@ func (eb *InMemoryEventBus) Publish(es domain.EventStream) error {
 		panic("not initialized")
 	}
 
-	if eb.status.Load() != 1 {
-		logger := logging.Get(context.TODO())
-		logger.Warn("'InMemoryEventBus' has stopped")
-		return eventing.ErrStoppedEventBus
-	}
-
-	eb.receiverCh <- &es
+	eb.mqCh <- &es
 	return nil
 }
 
@@ -72,16 +67,16 @@ func (eb *InMemoryEventBus) Start() {
 		if bufferSize <= 0 {
 			bufferSize = 1000
 		}
-		eb.receiverCh = make(chan *domain.EventStream, bufferSize)
 		go func() {
 		loop:
 			for {
 				select {
-				case data, ok := <-eb.receiverCh:
+				case data, ok := <-eb.mqCh:
 					if !ok {
 						break loop
 					}
-					eb.dispatcher.Dispatch(data)
+					atomic.AddInt64(&eb.fetchedCount, 1)
+					eb.dispatcher.Dispatch(data, nil)
 				case <-time.After(time.Second):
 					if eb.status.Load() != 1 {
 						break loop
@@ -99,10 +94,15 @@ func (eb *InMemoryEventBus) Stop() {
 
 	eb.status.CompareAndSwap(1, 2)
 	time.Sleep(time.Second)
-	for len(eb.receiverCh) > 0 {
+	for len(eb.mqCh) > 0 {
 		time.Sleep(time.Second)
 	}
 	<-goroutine.Wait()
-	close(eb.receiverCh)
 	eb.status.CompareAndSwap(2, 0)
+}
+
+func (eb *InMemoryEventBus) Stats() eventing.EventProcessorStatistic {
+	return eventing.EventProcessorStatistic{
+		FetchedCount: atomic.LoadInt64(&eb.fetchedCount),
+	}
 }

@@ -32,8 +32,10 @@ type MailboxProvider[TMessageBody any] interface {
 }
 
 type MailBoxStatistic struct {
-	CreatedCount int64
-	RemovedCount int64
+	CreatedCount    int64
+	RemovedCount    int64
+	ProcessingCount int64
+	ProcessedCount  int64
 }
 
 type Mail[TMessage any] interface {
@@ -63,8 +65,10 @@ type DefaultMailboxProvider[TMessage any] struct {
 	mailboxes sync.Map
 
 	// stats
-	createdCounter atomic.Int64
-	removedCounter atomic.Int64
+	createdCounter    atomic.Int64
+	removedCounter    atomic.Int64
+	processingCounter atomic.Int64
+	processedCounter  atomic.Int64
 }
 
 func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggregateTypeName string, handlers map[string][]MessageHandler[TMessage]) Mailbox[TMessage] {
@@ -74,9 +78,11 @@ func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggreg
 	}
 
 	actual, loaded := p.mailboxes.LoadOrStore(mailboxName, &defaultMailbox[TMessage]{
-		name:               mailboxName,
-		autoReleaseTimeout: p.AutoReleaseTimeout,
-		handlers:           handlers,
+		name:                      mailboxName,
+		autoReleaseTimeout:        p.AutoReleaseTimeout,
+		handlers:                  handlers,
+		increaseProcessingCounter: func() { p.processingCounter.Add(1) },
+		increaseProcessedCounter:  func() { p.processedCounter.Add(1) },
 	})
 	mb := actual.(*defaultMailbox[TMessage])
 	if !loaded {
@@ -91,8 +97,10 @@ func (p *DefaultMailboxProvider[TMessage]) GetMailbox(aggregateID string, aggreg
 
 func (p *DefaultMailboxProvider[TMessage]) Stats() MailBoxStatistic {
 	return MailBoxStatistic{
-		CreatedCount: p.createdCounter.Load(),
-		RemovedCount: p.removedCounter.Load(),
+		CreatedCount:    p.createdCounter.Load(),
+		RemovedCount:    p.removedCounter.Load(),
+		ProcessingCount: p.processingCounter.Load(),
+		ProcessedCount:  p.processedCounter.Load(),
 	}
 }
 
@@ -105,11 +113,13 @@ const (
 var _ Mailbox[any] = (*defaultMailbox[any])(nil)
 
 type defaultMailbox[TMessage any] struct {
-	name               string
-	autoReleaseTimeout time.Duration
-	receiverCh         chan MailsWithResult[TMessage]
-	handlers           map[string][]MessageHandler[TMessage]
-	logger             *slog.Logger
+	name                      string
+	autoReleaseTimeout        time.Duration
+	receiverCh                chan MailsWithResult[TMessage]
+	handlers                  map[string][]MessageHandler[TMessage]
+	logger                    *slog.Logger
+	increaseProcessingCounter func()
+	increaseProcessedCounter  func()
 
 	status atomic.Int32
 }
@@ -127,6 +137,7 @@ func (mb *defaultMailbox[TMessage]) SendMail(data MailsWithResult[TMessage]) err
 		return errMailboxDestoryed
 	}
 	mb.receiverCh <- data
+	mb.increaseProcessingCounter()
 	return nil
 }
 
@@ -177,6 +188,7 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 	handleResult := MessageHandleResult{}
 	defer func() {
 		data.ResultCh <- handleResult
+		mb.increaseProcessedCounter()
 	}()
 
 	allHandlers := mb.handlers
@@ -213,7 +225,7 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 					err = handler.Handle(handleCtx, mail.Unwrap())
 					return
 				}, time.Second, func(retryCount int, err error) bool {
-					if _, ok := err.(net.Error); ok {
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 						return true
 					}
 					return false

@@ -11,6 +11,7 @@ import (
 
 	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/domain"
+	"github.com/berkaroad/squat/errors"
 	"github.com/berkaroad/squat/eventing"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
@@ -165,7 +166,7 @@ func (r *EventSourcedRepository[T]) Get(ctx context.Context, aggregateID string)
 
 	eventStreams := make(domain.EventStreamSlice, 0)
 	for _, eventStreamData := range eventStreamDatas {
-		eventStream, err := ToEventStream(r.serializer, eventStreamData)
+		eventStream, err := ToEventStream(r.serializer, &eventStreamData)
 		if err != nil {
 			logger.Error(err.Error(),
 				slog.String("aggregate-id", eventStreamData.AggregateID),
@@ -173,7 +174,7 @@ func (r *EventSourcedRepository[T]) Get(ctx context.Context, aggregateID string)
 			)
 			return aggregate, err
 		}
-		eventStreams = append(eventStreams, eventStream)
+		eventStreams = append(eventStreams, *eventStream)
 	}
 
 	if snapshot != nil || len(eventStreams) > 0 {
@@ -208,7 +209,7 @@ func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error
 		Set(messaging.ExtensionKeyAggregateChanged, "true")
 
 	logger := logging.Get(ctx)
-	eventStream := domain.EventStream{
+	eventStream := &domain.EventStream{
 		AggregateID:   aggregate.AggregateID(),
 		AggregateType: aggregate.AggregateTypeName(),
 		StreamVersion: aggregate.AggregateVersion(),
@@ -229,12 +230,31 @@ func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error
 		return err
 	}
 	if r.ess != nil {
-		err = <-r.ess.AppendEventStream(ctx, eventStreamData)
+		err = <-r.ess.AppendEventStream(ctx, *eventStreamData)
+		if err != nil {
+			err = fmt.Errorf("%w: %v", domain.ErrSaveAggregateFail, err)
+		}
 	} else {
-		err = r.es.AppendEventStream(ctx, eventstore.EventStreamDataSlice{eventStreamData})
+		err = r.es.AppendEventStream(ctx, eventstore.EventStreamDataSlice{*eventStreamData})
+		if err != nil {
+			if eventstore.IsErrDuplicateCommandID(err) {
+				err = fmt.Errorf("%w: %v", domain.ErrAggregateNoChange, err)
+			} else {
+				if errors.Is(err, eventstore.ErrUnexpectedVersion) {
+					err = fmt.Errorf("%w: %v", domain.ErrSaveAggregateFail, err)
+
+					// remove cache
+					if r.CacheEnabled && r.cache != nil {
+						r.cache.Remove(aggregate.AggregateID())
+					}
+				}
+				err = fmt.Errorf("%w: %v", domain.ErrSaveAggregateFail, err)
+			}
+		}
 	}
 	if err != nil {
-		err = fmt.Errorf("%w: %v", domain.ErrSaveAggregateFail, err)
+		commandMeta.Extensions = commandMeta.Extensions.Clone().
+			Remove(messaging.ExtensionKeyAggregateChanged)
 		logger.Error(err.Error(),
 			slog.Int("stream-version", eventStream.StreamVersion),
 		)
@@ -246,7 +266,7 @@ func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error
 	}
 
 	// publish eventstream
-	r.ep.Publish(eventStream)
+	r.ep.Publish(*eventStream)
 
 	// save snapshot
 	if r.SnapshotEnabled && (r.ss != nil || r.sss != nil) {

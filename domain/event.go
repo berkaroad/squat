@@ -23,16 +23,11 @@ func NewDomainEventBase(eventID string) DomainEventBase {
 	}
 }
 
-var _ DomainEvent = DomainEventBase{}
-
 type DomainEventBase struct {
-	E_ID string
-	E_Ts int64
+	E_ID string `json:"e_id"`
+	E_Ts int64  `json:"e_ts"`
 }
 
-func (e DomainEventBase) TypeName() string {
-	panic("method 'TypeName()' not impletement")
-}
 func (e DomainEventBase) EventID() string {
 	return e.E_ID
 }
@@ -48,6 +43,16 @@ type EventStream struct {
 	CommandID     string
 	CommandType   string
 	Extensions    map[string]string
+}
+
+func (es *EventStream) Reset() {
+	es.AggregateID = ""
+	es.AggregateType = ""
+	es.StreamVersion = 0
+	es.Events = nil
+	es.CommandID = ""
+	es.CommandType = ""
+	es.Extensions = nil
 }
 
 type EventStreamSlice []EventStream

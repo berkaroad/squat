@@ -8,7 +8,6 @@ import (
 
 	"github.com/berkaroad/squat/commanding"
 	"github.com/berkaroad/squat/eventing"
-	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 	"github.com/berkaroad/squat/utilities/goroutine"
 )
@@ -30,8 +29,11 @@ type InMemoryCommandBus struct {
 
 	initOnce    sync.Once
 	initialized bool
-	receiverCh  chan *commanding.CommandData
-	status      atomic.Int32 // 0: stop, 1: running, 2: stopping
+	mqCh        chan *commanding.CommandData // simulate a real message queue.
+	status      atomic.Int32                 // 0: stop, 1: running, 2: stopping
+
+	// statistics
+	fetchedCount int64
 }
 
 func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher, watcher messaging.MessageHandleResultWatcher) *InMemoryCommandBus {
@@ -48,7 +50,7 @@ func (cb *InMemoryCommandBus) Initialize(dispatcher commanding.CommandDispatcher
 		}
 		cb.dispatcher = dispatcher
 		cb.watcher = watcher
-		cb.receiverCh = make(chan *commanding.CommandData, bufferSize)
+		cb.mqCh = make(chan *commanding.CommandData, bufferSize)
 		cb.initialized = true
 	})
 	return cb
@@ -59,14 +61,9 @@ func (cb *InMemoryCommandBus) Send(ctx context.Context, cmd commanding.Command) 
 		panic("not initialized")
 	}
 
-	if cb.status.Load() != 1 {
-		logger := logging.Get(ctx)
-		logger.Warn("'InMemoryCommandBus' has stopped")
-		return commanding.ErrStoppedCommandBus
-	}
 	eventMetadata := messaging.FromContext(ctx)
 	if eventMetadata == nil {
-		cb.receiverCh <- &commanding.CommandData{
+		cb.mqCh <- &commanding.CommandData{
 			Command: cmd,
 		}
 		return nil
@@ -74,7 +71,7 @@ func (cb *InMemoryCommandBus) Send(ctx context.Context, cmd commanding.Command) 
 		if eventMetadata.Category == commanding.MailCategory {
 			panic("'InMemoryCommandBus.Send(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
 		}
-		cb.receiverCh <- &commanding.CommandData{
+		cb.mqCh <- &commanding.CommandData{
 			Command: cmd,
 			Extensions: eventMetadata.Extensions.Clone().
 				Remove(messaging.ExtensionKeyNoticeServiceEndpoint).
@@ -90,18 +87,12 @@ func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Comman
 		panic("not initialized")
 	}
 
-	if cb.status.Load() != 1 {
-		logger := logging.Get(ctx)
-		logger.Warn("'InMemoryCommandBus' has stopped")
-		return nil, commanding.ErrStoppedCommandBus
-	}
-
 	eventMetadata := messaging.FromContext(ctx)
 	if eventMetadata == nil {
 		fromCommandWatchItem := cb.watcher.Watch(cmd.CommandID(), commanding.CommandHandleResultProvider)
 		fromEventWatchItem := cb.watcher.Watch(cmd.CommandID(), eventing.CommandHandleResultProvider)
 
-		cb.receiverCh <- &commanding.CommandData{
+		cb.mqCh <- &commanding.CommandData{
 			Command:    cmd,
 			Extensions: map[string]string{string(messaging.ExtensionKeyNoticeServiceEndpoint): cb.NoticeServiceEndpoint},
 		}
@@ -111,7 +102,7 @@ func (cb *InMemoryCommandBus) Execute(ctx context.Context, cmd commanding.Comman
 			panic("'InMemoryCommandBus.Execute(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
 		}
 
-		cb.receiverCh <- &commanding.CommandData{
+		cb.mqCh <- &commanding.CommandData{
 			Command: cmd,
 			Extensions: eventMetadata.Extensions.Clone().
 				Remove(messaging.ExtensionKeyNoticeServiceEndpoint).
@@ -132,16 +123,16 @@ func (cb *InMemoryCommandBus) Start() {
 		if bufferSize <= 0 {
 			bufferSize = 1000
 		}
-		cb.receiverCh = make(chan *commanding.CommandData, bufferSize)
 		go func() {
 		loop:
 			for {
 				select {
-				case data, ok := <-cb.receiverCh:
+				case data, ok := <-cb.mqCh:
 					if !ok {
 						break loop
 					}
-					cb.dispatcher.Dispatch(data)
+					atomic.AddInt64(&cb.fetchedCount, 1)
+					cb.dispatcher.Dispatch(data, nil)
 				case <-time.After(time.Second):
 					if cb.status.Load() != 1 {
 						break loop
@@ -159,10 +150,15 @@ func (cb *InMemoryCommandBus) Stop() {
 
 	cb.status.CompareAndSwap(1, 2)
 	time.Sleep(time.Second)
-	for len(cb.receiverCh) > 0 {
+	for len(cb.mqCh) > 0 {
 		time.Sleep(time.Second)
 	}
 	<-goroutine.Wait()
-	close(cb.receiverCh)
 	cb.status.CompareAndSwap(2, 0)
+}
+
+func (cb *InMemoryCommandBus) Stats() commanding.CommandProcessorStatistic {
+	return commanding.CommandProcessorStatistic{
+		FetchedCount: atomic.LoadInt64(&cb.fetchedCount),
+	}
 }

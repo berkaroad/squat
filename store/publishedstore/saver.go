@@ -43,12 +43,7 @@ func (saver *DefaultPublishedStoreSaver) Initialize(publishedStore PublishedStor
 		if publishedStore == nil {
 			panic("param 'publishedStore' is null")
 		}
-		batchSize := saver.BatchSize
-		if batchSize <= 0 {
-			batchSize = 100
-		}
 		saver.ps = publishedStore
-		saver.receiverCh = make(chan *PublishedEventStreamRef, batchSize)
 		saver.initialized = true
 	})
 	return saver
@@ -97,7 +92,7 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 		if batchSize <= 0 {
 			batchSize = 100
 		}
-		saver.receiverCh = make(chan *PublishedEventStreamRef, batchSize)
+		saver.receiverCh = make(chan *PublishedEventStreamRef, batchSize*2)
 		go func() {
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
@@ -190,7 +185,7 @@ func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store Pu
 	err := retrying.Retry(func() error {
 		return store.SavePublished(ctx, datas)
 	}, time.Second, func(retryCount int, err error) bool {
-		if _, ok := err.(net.Error); ok {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout(){
 			return true
 		}
 		return false

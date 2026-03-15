@@ -15,5 +15,4 @@ var (
 	ErrWaitFromCommandHandlerTimeout error = errors.NewWithCode(ErrCodeWaitFromCommandHandlerTimeout, "wait command result from command handler timeout")
 	ErrWaitFromEventHandlerTimeout   error = errors.NewWithCode(ErrCodeWaitFromEventHandlerTimeout, "wait command result from event handler timeout")
 	ErrWaitCommandResultCancelled    error = errors.NewWithCode(ErrCodeWaitCommandResultCancelled, "wait command result cancelled")
-	ErrStoppedCommandBus             error = errors.NewWithCode(ErrCodeStoppedCommandBus, "stopped command bus")
 )

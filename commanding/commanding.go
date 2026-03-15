@@ -23,9 +23,14 @@ type CommandBus interface {
 	Execute(ctx context.Context, cmd Command) (*CommandHandleResult, error)
 }
 
+type CommandProcessorStatistic struct {
+	FetchedCount int64
+}
+
 type CommandProcessor interface {
 	Start()
 	Stop()
+	Stats() CommandProcessorStatistic
 }
 
 type CommandData struct {
@@ -65,25 +70,17 @@ func NewCommandBase(commandID string, aggregateID string) CommandBase {
 	}
 }
 
-var _ Command = CommandBase{}
-
 // Base of command, should override method 'TypeName()' and 'AggregateTypeName()'
 type CommandBase struct {
-	C_ID          string
-	C_AggregateID string
+	C_ID          string `json:"c_id"`
+	C_AggregateID string `json:"c_aggregate_id"`
 }
 
-func (c CommandBase) TypeName() string {
-	panic("method 'TypeName()' not impletement")
-}
 func (c CommandBase) CommandID() string {
 	return c.C_ID
 }
 func (c CommandBase) AggregateID() string {
 	return c.C_AggregateID
-}
-func (c CommandBase) AggregateTypeName() string {
-	panic("method 'AggregateTypeName()' not impletement")
 }
 
 func CreateCommandMail(data *CommandData) messaging.Mail[CommandData] {

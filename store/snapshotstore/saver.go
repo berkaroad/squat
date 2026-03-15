@@ -42,12 +42,7 @@ func (saver *DefaultSnapshotStoreSaver) Initialize(snapshotStore SnapshotStore) 
 		if snapshotStore == nil {
 			panic("param 'snapshotStore' is null")
 		}
-		batchSize := saver.BatchSize
-		if batchSize <= 0 {
-			batchSize = 100
-		}
 		saver.ss = snapshotStore
-		saver.receiverCh = make(chan *AggregateSnapshotData, batchSize)
 		saver.initialized = true
 	})
 	return saver
@@ -76,7 +71,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 		if batchSize <= 0 {
 			batchSize = 100
 		}
-		saver.receiverCh = make(chan *AggregateSnapshotData, batchSize)
+		saver.receiverCh = make(chan *AggregateSnapshotData, batchSize*2)
 		go func() {
 			minVersionDiff := saver.TakeSnapshotMinVersionDiff
 			if minVersionDiff <= 0 {
@@ -188,7 +183,7 @@ func (saver *DefaultSnapshotStoreSaver) batchSave(ctx context.Context, store Sna
 	err := retrying.Retry(func() error {
 		return store.SaveSnapshot(ctx, datas)
 	}, time.Second, func(retryCount int, err error) bool {
-		if _, ok := err.(net.Error); ok {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout(){
 			return true
 		}
 		return false

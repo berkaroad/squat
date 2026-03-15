@@ -20,7 +20,7 @@ type CommandDispatcher interface {
 	Subscribe(commandTypeName string, handler CommandHandler)
 	SubscribeMulti(handlerGroup CommandHandlerGroup)
 	AddProxy(proxies ...CommandHandlerProxy)
-	Dispatch(data *CommandData)
+	Dispatch(data *CommandData, callback func(messaging.MessageHandleResult))
 }
 
 var _ CommandDispatcher = (*DefaultCommandDispatcher)(nil)
@@ -146,7 +146,7 @@ func (cd *DefaultCommandDispatcher) AddProxy(proxies ...CommandHandlerProxy) {
 	}
 }
 
-func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData) {
+func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData, callback func(messaging.MessageHandleResult)) {
 	if !cd.initialized {
 		panic("not initialized")
 	}
@@ -169,20 +169,24 @@ func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData) {
 	}
 
 	// If there are no proxied handlers, also can receive from resultCh with error 'missing message handler'.
-	if cd.notifier != nil {
-		// notify event bus
-		if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
+	go func() {
+		result := <-resultCh
+		if callback != nil {
+			callback(result)
+		}
+		if cd.notifier != nil {
 			go func() {
-				logger := logging.Get(context.Background())
-				result := <-resultCh
-				cd.notifier.Notify(noticeServiceEndpoint, data.CommandID(), CommandHandleResultProvider, result)
-				logger.Info(fmt.Sprintf("notify command handle result from %s", CommandHandleResultProvider),
-					slog.String("command-id", data.CommandID()),
-					slog.String("command-type", data.TypeName()),
-					slog.String("aggregate-id", data.AggregateID()),
-					slog.String("aggregate-type", data.AggregateTypeName()),
-				)
+				if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
+					logger := logging.Get(context.Background())
+					cd.notifier.Notify(noticeServiceEndpoint, data.CommandID(), CommandHandleResultProvider, result)
+					logger.Info(fmt.Sprintf("notify commandbus command handled from %s", CommandHandleResultProvider),
+						slog.String("command_id", data.CommandID()),
+						slog.String("command_type", data.TypeName()),
+						slog.String("aggregate_id", data.AggregateID()),
+						slog.String("aggregate_type", data.AggregateTypeName()),
+					)
+				}
 			}()
 		}
-	}
+	}()
 }
