@@ -1,6 +1,9 @@
 package errors
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 const (
 	SysErrCodePrefix string = "squat:"
@@ -20,13 +23,10 @@ func NewWithCode(code string, text string) error {
 }
 
 func NewWithCodeAndStates(code string, text string, states map[string]string) error {
-	var err error
-	if val, ok := mapping.Load(code); ok {
-		err = val.(*errorStringWithCodeAndStates)
-	} else {
-		err = &errorStringWithCodeAndStates{text: text, code: code, states: states}
-		mapping.Store(code, err)
+	for k, v := range states {
+		text += fmt.Sprintf(", %s=%s ", k, v)
 	}
+	err := &errorStringWithCodeAndStates{text: text, code: code, states: states}
 	return err
 }
 
