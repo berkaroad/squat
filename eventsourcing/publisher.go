@@ -32,9 +32,9 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 	publishedStoreSaver := ep.pss
 	serializer := ep.serializer
 	logger := baseLogger.With(
-		slog.String("aggregate-id", eventStream.AggregateID),
-		slog.String("aggregate-type", eventStream.AggregateType),
-		slog.Int("stream-version", eventStream.StreamVersion),
+		slog.String("aggregate_id", eventStream.AggregateID),
+		slog.String("aggregate_type", eventStream.AggregateType),
+		slog.Int("stream_version", eventStream.StreamVersion),
 	)
 	bgCtx := logging.NewContext(context.Background(), logger)
 	publishedVersion := retrying.RetryWithResultForever[int](func() (int, error) {
@@ -57,8 +57,8 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 		}, time.Second, func(retryCount int, err error) bool {
 			if retryCount == 0 {
 				logger.Error(fmt.Sprintf("query eventstream fail: %v", err),
-					slog.Int("start-version", publishedVersion+1),
-					slog.Int("end-version", math.MaxInt),
+					slog.Int("start_version", publishedVersion+1),
+					slog.Int("end_version", math.MaxInt),
 				)
 			}
 			return true
@@ -69,7 +69,7 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 		if err != nil {
 			textData, _ := serialization.SerializeToText(ep.serializer, unpublishedEventStreamDatas)
 			logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
-				slog.String("unpublished-eventstream", textData),
+				slog.String("unpublished_eventstream", textData),
 			)
 			return
 		}
@@ -79,8 +79,8 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 		}, time.Second, func(retryCount int, err error) bool {
 			if retryCount == 0 {
 				logger.Error(fmt.Sprintf("query eventstream fail: %v", err),
-					slog.Int("start-version", publishedVersion+1),
-					slog.Int("end-version", eventStream.StreamVersion-1),
+					slog.Int("start_version", publishedVersion+1),
+					slog.Int("end_version", eventStream.StreamVersion-1),
 				)
 			}
 			return true
@@ -91,7 +91,7 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 		if err != nil {
 			textData, _ := serialization.SerializeToText(ep.serializer, unpublishedEventStreamDatas)
 			logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
-				slog.String("unpublished-eventstream", textData),
+				slog.String("unpublished_eventstream", textData),
 			)
 			return
 		}
@@ -99,8 +99,8 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 
 	if len(unpublishedEventStreams) > 0 {
 		unpublishedLogger := baseLogger.With(
-			slog.String("aggregate-id", eventStream.AggregateID),
-			slog.String("aggregate-type", eventStream.AggregateType),
+			slog.String("aggregate_id", eventStream.AggregateID),
+			slog.String("aggregate_type", eventStream.AggregateType),
 		)
 		bgCtx2 := logging.NewContext(context.Background(), logger)
 		for _, unpublishedEventStream := range unpublishedEventStreams {
@@ -109,14 +109,14 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 			}, time.Second, func(retryCount int, err error) bool {
 				if retryCount == 0 {
 					unpublishedLogger.Error(fmt.Sprintf("publish eventstream fail: %v", err),
-						slog.Int("stream-version", unpublishedEventStream.StreamVersion),
+						slog.Int("stream_version", unpublishedEventStream.StreamVersion),
 					)
 				}
 				return true
 			})
 			publishedVersion = unpublishedEventStream.StreamVersion
 			logger.Debug("publish unpublished eventstreams",
-				slog.Int("unpublished-version", unpublishedEventStream.StreamVersion),
+				slog.Int("unpublished_version", unpublishedEventStream.StreamVersion),
 			)
 		}
 
@@ -138,7 +138,7 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 		}, time.Second, func(retryCount int, err error) bool {
 			if retryCount == 0 {
 				unpublishedLogger.Error(fmt.Sprintf("save published eventstream fail: %v", err),
-					slog.Int("published-version", publishedVersion),
+					slog.Int("published_version", publishedVersion),
 				)
 			}
 			return true
@@ -174,14 +174,14 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 		}, time.Second, func(retryCount int, err error) bool {
 			if retryCount == 0 {
 				logger.Error(fmt.Sprintf("save published eventstream fail: %v", err),
-					slog.Int("published-version", publishedVersion),
+					slog.Int("published_version", publishedVersion),
 				)
 			}
 			return true
 		})
 	} else {
 		logger.Warn("skip published eventstream",
-			slog.Int("published-version", publishedVersion),
+			slog.Int("published_version", publishedVersion),
 		)
 	}
 }

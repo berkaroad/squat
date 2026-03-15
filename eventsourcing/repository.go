@@ -123,7 +123,7 @@ func (r *EventSourcedRepository[T]) Get(ctx context.Context, aggregateID string)
 				r.cache.Remove(aggregateID)
 			} else {
 				logger.Debug("load aggregate from cache",
-					slog.String("aggregate-id", aggregateID),
+					slog.String("aggregate_id", aggregateID),
 				)
 				return newAggregate, nil
 			}
@@ -138,14 +138,14 @@ func (r *EventSourcedRepository[T]) Get(ctx context.Context, aggregateID string)
 		if err != nil {
 			err = fmt.Errorf("%w: %v", domain.ErrGetAggregateFail, err)
 			logger.Warn(err.Error(),
-				slog.String("aggregate-id", aggregateID),
+				slog.String("aggregate_id", aggregateID),
 			)
 		} else if snapshotData.AggregateID != "" && snapshotData.SnapshotVersion > 0 {
 			snapshot, err = ToAggregateSnapshot(r.serializer, snapshotData)
 			if err != nil {
 				logger.Warn(err.Error(),
-					slog.String("aggregate-id", snapshotData.AggregateID),
-					slog.Int("snapshot-version", snapshotData.SnapshotVersion),
+					slog.String("aggregate_id", snapshotData.AggregateID),
+					slog.Int("snapshot_version", snapshotData.SnapshotVersion),
 				)
 			} else {
 				startVersion = snapshotData.SnapshotVersion
@@ -157,9 +157,9 @@ func (r *EventSourcedRepository[T]) Get(ctx context.Context, aggregateID string)
 	if err != nil {
 		err = fmt.Errorf("%w: %v", domain.ErrGetAggregateFail, err)
 		logger.Error(err.Error(),
-			slog.String("aggregate-id", aggregateID),
-			slog.Int("start-version", startVersion+1),
-			slog.Int("end-version", math.MaxInt32),
+			slog.String("aggregate_id", aggregateID),
+			slog.Int("start_version", startVersion+1),
+			slog.Int("end_version", math.MaxInt32),
 		)
 		return aggregate, err
 	}
@@ -169,8 +169,8 @@ func (r *EventSourcedRepository[T]) Get(ctx context.Context, aggregateID string)
 		eventStream, err := ToEventStream(r.serializer, &eventStreamData)
 		if err != nil {
 			logger.Error(err.Error(),
-				slog.String("aggregate-id", eventStreamData.AggregateID),
-				slog.Int("stream-version", eventStreamData.StreamVersion),
+				slog.String("aggregate_id", eventStreamData.AggregateID),
+				slog.Int("stream_version", eventStreamData.StreamVersion),
 			)
 			return aggregate, err
 		}
@@ -225,7 +225,7 @@ func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error
 	if err != nil {
 		err = fmt.Errorf("%w: %v", domain.ErrSaveAggregateFail, err)
 		logger.Error(err.Error(),
-			slog.Int("stream-version", eventStream.StreamVersion),
+			slog.Int("stream_version", eventStream.StreamVersion),
 		)
 		return err
 	}
@@ -256,7 +256,7 @@ func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error
 		commandMeta.Extensions = commandMeta.Extensions.Clone().
 			Remove(messaging.ExtensionKeyAggregateChanged)
 		logger.Error(err.Error(),
-			slog.Int("stream-version", eventStream.StreamVersion),
+			slog.Int("stream_version", eventStream.StreamVersion),
 		)
 		return err
 	}

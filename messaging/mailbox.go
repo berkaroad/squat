@@ -196,10 +196,10 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 	for _, mail := range data.Mails {
 		metadata := mail.Metadata()
 		logger := mb.logger.With(
-			slog.String("message-id", metadata.MessageID),
-			slog.String("message-type", metadata.MessageType),
-			slog.String("aggregate-id", metadata.AggregateID),
-			slog.String("aggregate-type", metadata.AggregateType),
+			slog.String("message_id", metadata.MessageID),
+			slog.String("message_type", metadata.MessageType),
+			slog.String("aggregate_id", metadata.AggregateID),
+			slog.String("aggregate_type", metadata.AggregateType),
 		)
 		handleCtx := NewContext(logging.NewContext(context.Background(), logger), &metadata)
 
@@ -232,17 +232,17 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 				}, -1)
 				if err == nil {
 					logger.Debug(fmt.Sprintf("handle %s success", data.Category),
-						slog.String(fmt.Sprintf("%s-handler", data.Category), handler.FuncName),
+						slog.String(fmt.Sprintf("%s_handler", data.Category), handler.FuncName),
 					)
 				} else if errors.Is(err, domain.ErrAggregateNoChange) {
 					logger.Debug(fmt.Sprintf("handle %s success, but %v", data.Category, err),
-						slog.String(fmt.Sprintf("%s-handler", data.Category), handler.FuncName),
+						slog.String(fmt.Sprintf("%s_handler", data.Category), handler.FuncName),
 					)
 				} else {
 					handleErr = errors.Join(err)
 					if hasPanic {
 						logger.Error(fmt.Sprintf("handle %s %v", data.Category, err),
-							slog.String(fmt.Sprintf("%s-handler", data.Category), handler.FuncName),
+							slog.String(fmt.Sprintf("%s_handler", data.Category), handler.FuncName),
 						)
 					}
 				}

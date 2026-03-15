@@ -81,8 +81,8 @@ func (cache *MemoryCache) Get(cacheKey string, typeName string) (data any, loade
 			dataInterface, err := serialization.Deserialize(cache.serializer, typeName, bytes.NewReader(exists.Data))
 			if err != nil {
 				logger.Error(fmt.Sprintf("deserialize cache item fail: %v", err),
-					slog.String("cache-key", cacheKey),
-					slog.String("type-name", typeName),
+					slog.String("cache_key", cacheKey),
+					slog.String("type_name", typeName),
 				)
 				return
 			}
@@ -92,8 +92,8 @@ func (cache *MemoryCache) Get(cacheKey string, typeName string) (data any, loade
 			cache.hitCounter.Add(1)
 		} else {
 			logger.Debug("cache item has expired",
-				slog.String("cache-key", cacheKey),
-				slog.String("type-name", typeName),
+				slog.String("cache_key", cacheKey),
+				slog.String("type_name", typeName),
 			)
 		}
 	}
@@ -110,7 +110,7 @@ func (cache *MemoryCache) Set(cacheKey string, data any, expiration time.Duratio
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	if err := serialization.Serialize(cache.serializer, buf, data); err != nil {
 		logger.Error(fmt.Sprintf("serialize cache item fail: %v", err),
-			slog.String("cache-key", cacheKey),
+			slog.String("cache_key", cacheKey),
 		)
 		return err
 	} else {
@@ -152,17 +152,17 @@ func (cache *MemoryCache) cleanExpired() {
 		stat := cache.Stats()
 		hitRate := stat.HitRate()
 		cache.logger.Debug(fmt.Sprintf("cache '%s' hit rate %.4f", cache.name, hitRate),
-			slog.Float64("read-count", float64(stat.ReadCount)),
-			slog.Float64("write-count", float64(stat.WriteCount)),
-			slog.Float64("hit-count", float64(stat.HitCount)),
-			slog.Float64("remove-count", float64(stat.RemoveCount)),
+			slog.Float64("read_count", float64(stat.ReadCount)),
+			slog.Float64("write_count", float64(stat.WriteCount)),
+			slog.Float64("hit_count", float64(stat.HitCount)),
+			slog.Float64("remove_count", float64(stat.RemoveCount)),
 		)
 		if stat.WriteCount > 0 && hitRate < 0.8 {
 			cache.logger.Warn(fmt.Sprintf("cache '%s' hit rate %.4f too low", cache.name, hitRate),
-				slog.Float64("read-count", float64(stat.ReadCount)),
-				slog.Float64("write-count", float64(stat.WriteCount)),
-				slog.Float64("hit-count", float64(stat.HitCount)),
-				slog.Float64("remove-count", float64(stat.RemoveCount)),
+				slog.Float64("read_count", float64(stat.ReadCount)),
+				slog.Float64("write_count", float64(stat.WriteCount)),
+				slog.Float64("hit_count", float64(stat.HitCount)),
+				slog.Float64("remove_count", float64(stat.RemoveCount)),
 			)
 		}
 
@@ -185,10 +185,10 @@ func (cache *MemoryCache) cleanExpired() {
 			}
 			cache.removeCounter.Add(int64(len(keysToRemove)))
 			cache.logger.Debug(fmt.Sprintf("cache '%s' has cleaned %d items", cache.name, len(keysToRemove)),
-				slog.Float64("read-count", float64(stat.ReadCount)),
-				slog.Float64("write-count", float64(stat.WriteCount)),
-				slog.Float64("hit-count", float64(stat.HitCount)),
-				slog.Float64("remove-count", float64(stat.RemoveCount)))
+				slog.Float64("read_count", float64(stat.ReadCount)),
+				slog.Float64("write_count", float64(stat.WriteCount)),
+				slog.Float64("hit_count", float64(stat.HitCount)),
+				slog.Float64("remove_count", float64(stat.RemoveCount)))
 		}
 		cache.cleaning.CompareAndSwap(1, 0)
 		cache.cleanExpired()

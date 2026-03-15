@@ -117,10 +117,10 @@ func BenchmarkAccount(b *testing.B) {
 		}
 		if fromCommandResult.Err != nil {
 			logger.Error(fromCommandResult.Err.Error(),
-				slog.String("error-code", errors.GetErrorCode(fromCommandResult.Err)),
-				slog.String("command-id", cmd.CommandID()),
-				slog.String("command-type", cmd.TypeName()),
-				slog.String("aggregate-id", cmd.AggregateID()),
+				slog.String("error_code", errors.GetErrorCode(fromCommandResult.Err)),
+				slog.String("command_id", cmd.CommandID()),
+				slog.String("command_type", cmd.TypeName()),
+				slog.String("aggregate_id", cmd.AggregateID()),
 			)
 		}
 	}

@@ -192,13 +192,13 @@ func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store Pu
 	}, -1)
 	if err != nil {
 		logger.Error(fmt.Sprintf("batch save to publishedstore fail: %v", err),
-			slog.Uint64("shard-key", uint64(shardKey)),
-			slog.Uint64("data-count", uint64(len(dataMapping))),
+			slog.Uint64("shard_key", uint64(shardKey)),
+			slog.Uint64("data_count", uint64(len(dataMapping))),
 		)
 	} else {
 		logger.Debug("batch save to publishedstore success",
-			slog.Uint64("shard-key", uint64(shardKey)),
-			slog.Uint64("data-count", uint64(len(dataMapping))),
+			slog.Uint64("shard_key", uint64(shardKey)),
+			slog.Uint64("data_count", uint64(len(dataMapping))),
 		)
 	}
 }

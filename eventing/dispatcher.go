@@ -197,12 +197,12 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream, callback fu
 			if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
 				logger := logging.Get(context.Background())
 				ed.notifier.Notify(noticeServiceEndpoint, data.CommandID, CommandHandleResultProvider, result)
-				logger.Info(fmt.Sprintf("notify event handle result from %s", CommandHandleResultProvider),
-					slog.String("command-id", data.CommandID),
-					slog.String("command-type", data.CommandType),
-					slog.String("aggregate-id", data.AggregateID),
-					slog.String("aggregate-type", data.AggregateType),
-					slog.Int("stream-version", data.StreamVersion),
+				logger.Info(fmt.Sprintf("notify commandbus event handled from %s", CommandHandleResultProvider),
+					slog.String("command_id", data.CommandID),
+					slog.String("command_type", data.CommandType),
+					slog.String("aggregate_id", data.AggregateID),
+					slog.String("aggregate_type", data.AggregateType),
+					slog.Int("stream_version", data.StreamVersion),
 				)
 			}
 		}
