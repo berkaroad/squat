@@ -31,10 +31,12 @@ func (chr *CommandHandleResult) FromCommandHandle(ctx context.Context, timeout t
 	case fromCommand := <-chr.fromCommandWatchItem.Result():
 		return fromCommand
 	case <-time.After(timeout):
+		chr.fromCommandWatchItem.Unwatch()
 		return messaging.MessageHandleResult{
 			Err: ErrWaitFromCommandHandlerTimeout,
 		}
 	case <-ctx.Done():
+		chr.fromCommandWatchItem.Unwatch()
 		return messaging.MessageHandleResult{
 			Err: ErrWaitCommandResultCancelled,
 		}
@@ -56,6 +58,9 @@ func (chr *CommandHandleResult) FromEventHandle(ctx context.Context, timeout tim
 			if val, _ := fromCommand.Extensions.Get(messaging.ExtensionKeyAggregateChanged); val != "true" {
 				fromCommand.Extensions = fromCommand.Extensions.CustomExtensions()
 				fromCommand.Err = domain.ErrAggregateNoChange
+				if chr.fromEventWatchItem != nil {
+					chr.fromEventWatchItem.Unwatch()
+				}
 				return fromCommand
 			} else if chr.fromEventWatchItem == nil {
 				fromCommand.Extensions = fromCommand.Extensions.CustomExtensions()
@@ -66,24 +71,36 @@ func (chr *CommandHandleResult) FromEventHandle(ctx context.Context, timeout tim
 				fromEvent.Extensions = fromEvent.Extensions.CustomExtensions()
 				return fromEvent
 			case <-time.After(timeout - waitFromCommandDuration):
+				chr.fromEventWatchItem.Unwatch()
 				return messaging.MessageHandleResult{
 					Err: ErrWaitFromEventHandlerTimeout,
 				}
 			case <-ctx.Done():
+				chr.fromEventWatchItem.Unwatch()
 				return messaging.MessageHandleResult{
 					Err: ErrWaitCommandResultCancelled,
 				}
 			}
 		} else {
-			chr.fromEventWatchItem.Unwatch()
+			if chr.fromEventWatchItem != nil {
+				chr.fromEventWatchItem.Unwatch()
+			}
 			fromCommand.Extensions = fromCommand.Extensions.CustomExtensions()
 			return fromCommand
 		}
 	case <-time.After(timeout):
+		chr.fromCommandWatchItem.Unwatch()
+		if chr.fromEventWatchItem != nil {
+			chr.fromEventWatchItem.Unwatch()
+		}
 		return messaging.MessageHandleResult{
 			Err: ErrWaitFromCommandHandlerTimeout,
 		}
 	case <-ctx.Done():
+		chr.fromCommandWatchItem.Unwatch()
+		if chr.fromEventWatchItem != nil {
+			chr.fromEventWatchItem.Unwatch()
+		}
 		return messaging.MessageHandleResult{
 			Err: ErrWaitCommandResultCancelled,
 		}
