@@ -21,8 +21,9 @@ type SnapshotStoreSaver interface {
 }
 
 const (
-	defaultBatchSize     int           = 100
-	defaultBatchInterval time.Duration = time.Millisecond * 100
+	defaultTakeSnapshotMinVersionDiff int           = 10
+	defaultBatchSize                  int           = 100
+	defaultBatchInterval              time.Duration = time.Second
 )
 
 var _ SnapshotStoreSaver = (*DefaultSnapshotStoreSaver)(nil)
@@ -71,15 +72,15 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 
 	if saver.status.CompareAndSwap(0, 1) {
 		go func() {
+			minVersionDiff := saver.TakeSnapshotMinVersionDiff
+			if minVersionDiff <= 0 {
+				minVersionDiff = defaultTakeSnapshotMinVersionDiff
+			}
 			batchSize := saver.BatchSize
 			if batchSize <= 0 {
 				batchSize = defaultBatchSize
 			}
 			saver.receiverCh = make(chan *AggregateSnapshotData, batchSize*2)
-			minVersionDiff := saver.TakeSnapshotMinVersionDiff
-			if minVersionDiff <= 0 {
-				minVersionDiff = 10
-			}
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
 				batchInterval = defaultBatchInterval
@@ -128,7 +129,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 						shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData, batchSize)
 						time.Sleep(batchInterval)
 					}
-				case <-time.After(batchInterval / 2):
+				case <-time.After(batchInterval / 10):
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {

@@ -23,7 +23,7 @@ type EventStoreSaver interface {
 
 const (
 	defaultBatchSize     int           = 100
-	defaultBatchInterval time.Duration = time.Millisecond * 100
+	defaultBatchInterval time.Duration = 100 * time.Millisecond
 )
 
 var _ EventStoreSaver = (*DefaultEventStoreSaver)(nil)
@@ -118,7 +118,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult, batchSize)
 						time.Sleep(batchInterval)
 					}
-				case <-time.After(batchInterval / 2):
+				case <-time.After(batchInterval / 10):
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {

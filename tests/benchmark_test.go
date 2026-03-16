@@ -60,21 +60,11 @@ func BenchmarkAccount(b *testing.B) {
 	var eventprocessor eventing.EventProcessor = eb.(eventing.EventProcessor)
 
 	var es = inmemoryes.Default()
-	var ess = (&eventstore.DefaultEventStoreSaver{
-		BatchSize:     100,
-		BatchInterval: 10 * time.Millisecond,
-	}).Initialize(es)
+	var ess = (&eventstore.DefaultEventStoreSaver{}).Initialize(es)
 	var ps = inmemoryps.Default()
-	var pss = (&publishedstore.DefaultPublishedStoreSaver{
-		BatchSize:     100,
-		BatchInterval: 10 * time.Millisecond,
-	}).Initialize(ps)
+	var pss = (&publishedstore.DefaultPublishedStoreSaver{}).Initialize(ps)
 	var ss = inmemoryss.Default()
-	var sss = (&snapshotstore.DefaultSnapshotStoreSaver{
-		TakeSnapshotMinVersionDiff: 1,
-		BatchSize:                  100,
-		BatchInterval:              10 * time.Millisecond,
-	}).Initialize(ss)
+	var sss = (&snapshotstore.DefaultSnapshotStoreSaver{}).Initialize(ss)
 
 	// business initialization
 	serialization.Map[AccountSnapshot]()
