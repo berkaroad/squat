@@ -30,8 +30,8 @@ import (
 func BenchmarkAccount(b *testing.B) {
 	ctx := context.TODO()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: false,
-		Level:     slog.LevelWarn,
+		AddSource: true,
+		Level:     slog.LevelError,
 	}))
 	slog.SetDefault(logger)
 
@@ -60,11 +60,21 @@ func BenchmarkAccount(b *testing.B) {
 	var eventprocessor eventing.EventProcessor = eb.(eventing.EventProcessor)
 
 	var es = inmemoryes.Default()
-	var ess = (&eventstore.DefaultEventStoreSaver{}).Initialize(es)
+	var ess = (&eventstore.DefaultEventStoreSaver{
+		BatchSize:     100,
+		BatchInterval: 10 * time.Millisecond,
+	}).Initialize(es)
 	var ps = inmemoryps.Default()
-	var pss = (&publishedstore.DefaultPublishedStoreSaver{}).Initialize(ps)
+	var pss = (&publishedstore.DefaultPublishedStoreSaver{
+		BatchSize:     100,
+		BatchInterval: 10 * time.Millisecond,
+	}).Initialize(ps)
 	var ss = inmemoryss.Default()
-	var sss = (&snapshotstore.DefaultSnapshotStoreSaver{TakeSnapshotMinVersionDiff: 1}).Initialize(ss)
+	var sss = (&snapshotstore.DefaultSnapshotStoreSaver{
+		TakeSnapshotMinVersionDiff: 1,
+		BatchSize:                  100,
+		BatchInterval:              10 * time.Millisecond,
+	}).Initialize(ss)
 
 	// business initialization
 	serialization.Map[AccountSnapshot]()
@@ -138,7 +148,7 @@ func BenchmarkAccount(b *testing.B) {
 				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
 				Name:        fmt.Sprintf("Account %d", i),
 			}
-			go processCmdResult(wg, cmd, time.Second*10)
+			go processCmdResult(wg, cmd, time.Second*30)
 		}
 		wg.Wait()
 	})
@@ -156,7 +166,7 @@ func BenchmarkAccount(b *testing.B) {
 				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
 				Amount:      1.1,
 			}
-			go processCmdResult(wg, cmd, time.Second*10)
+			go processCmdResult(wg, cmd, time.Second*30)
 		}
 		wg.Wait()
 	})
@@ -174,7 +184,7 @@ func BenchmarkAccount(b *testing.B) {
 				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
 				Amount:      1.1,
 			}
-			go processCmdResult(wg, cmd, time.Second*10)
+			go processCmdResult(wg, cmd, time.Second*30)
 		}
 		wg.Wait()
 	})
@@ -191,7 +201,7 @@ func BenchmarkAccount(b *testing.B) {
 			cmd := &RemoveAccountCommand{
 				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
 			}
-			go processCmdResult(wg, cmd, time.Second*10)
+			go processCmdResult(wg, cmd, time.Second*30)
 		}
 		wg.Wait()
 	})

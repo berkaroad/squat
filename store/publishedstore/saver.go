@@ -21,7 +21,10 @@ type PublishedStoreSaver interface {
 	Stop()
 }
 
-const checkInterval time.Duration = time.Millisecond * 10
+const (
+	defaultBatchSize     int           = 100
+	defaultBatchInterval time.Duration = time.Millisecond * 100
+)
 
 var _ PublishedStoreSaver = (*DefaultPublishedStoreSaver)(nil)
 
@@ -88,15 +91,15 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 	}
 
 	if saver.status.CompareAndSwap(0, 1) {
-		batchSize := saver.BatchSize
-		if batchSize <= 0 {
-			batchSize = 100
-		}
-		saver.receiverCh = make(chan *PublishedEventStreamRef, batchSize*2)
 		go func() {
+			batchSize := saver.BatchSize
+			if batchSize <= 0 {
+				batchSize = defaultBatchSize
+			}
+			saver.receiverCh = make(chan *PublishedEventStreamRef, batchSize*2)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = 100 * time.Millisecond
+				batchInterval = defaultBatchInterval
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
@@ -127,8 +130,9 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 						delete(shardingTimeMapping, shardKey)
 						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
 						shardingMapping[shardKey] = make(map[string]*PublishedEventStreamRef, batchSize)
+						time.Sleep(batchInterval)
 					}
-				case <-time.After(checkInterval):
+				case <-time.After(batchInterval):
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {
@@ -145,7 +149,6 @@ func (saver *DefaultPublishedStoreSaver) Start() {
 								wg.Add(1)
 								go func(shardKey uint8, datas map[string]*PublishedEventStreamRef) {
 									defer wg.Done()
-
 									saver.batchSave(bgCtx, store, shardKey, datas)
 								}(shardKey, datas)
 							}
@@ -185,7 +188,7 @@ func (saver *DefaultPublishedStoreSaver) batchSave(ctx context.Context, store Pu
 	err := retrying.Retry(func() error {
 		return store.SavePublished(ctx, datas)
 	}, time.Second, func(retryCount int, err error) bool {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout(){
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			return true
 		}
 		return false

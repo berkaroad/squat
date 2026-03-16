@@ -3,4 +3,4 @@ go-test:
 	go tool cover -html=coverage.out -o coverage.html
 
 go-bench:
-	go test -run=none -count=1 -benchtime=10000x -benchmem -bench=. ./tests
+	go test -run=none -count=1 -benchtime=1000x -benchmem -bench=. ./tests

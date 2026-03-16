@@ -20,7 +20,10 @@ type SnapshotStoreSaver interface {
 	Stop()
 }
 
-const checkInterval time.Duration = time.Second
+const (
+	defaultBatchSize     int           = 100
+	defaultBatchInterval time.Duration = time.Millisecond * 100
+)
 
 var _ SnapshotStoreSaver = (*DefaultSnapshotStoreSaver)(nil)
 
@@ -67,19 +70,19 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 	}
 
 	if saver.status.CompareAndSwap(0, 1) {
-		batchSize := saver.BatchSize
-		if batchSize <= 0 {
-			batchSize = 100
-		}
-		saver.receiverCh = make(chan *AggregateSnapshotData, batchSize*2)
 		go func() {
+			batchSize := saver.BatchSize
+			if batchSize <= 0 {
+				batchSize = defaultBatchSize
+			}
+			saver.receiverCh = make(chan *AggregateSnapshotData, batchSize*2)
 			minVersionDiff := saver.TakeSnapshotMinVersionDiff
 			if minVersionDiff <= 0 {
 				minVersionDiff = 10
 			}
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = time.Second * 10
+				batchInterval = defaultBatchInterval
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
@@ -88,7 +91,7 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 			store := saver.ss
 			shardingMapping := make(map[uint8]map[string]*AggregateSnapshotData)
 			shardingTimeMapping := make(map[uint8]time.Time)
-			snapshotVersionDiffMapping := make(map[string]*snapshotVersionDiff)
+			snapshotVersionDiffMapping := make(map[string]int)
 			bgCtx := context.Background()
 		loop:
 			for {
@@ -107,11 +110,12 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 					if _, ok := shardingTimeMapping[shardKey]; !ok {
 						shardingTimeMapping[shardKey] = time.Now()
 					}
-					if exists, ok := snapshotVersionDiffMapping[data.AggregateID]; !ok {
-						snapshotVersionDiffMapping[data.AggregateID] = &snapshotVersionDiff{StartVersion: 1, EndVersion: 1}
-					} else if exists.EndVersion < data.SnapshotVersion {
-						snapshotVersionDiffMapping[data.AggregateID].EndVersion++
-						if snapshotVersionDiffMapping[data.AggregateID].Diff() >= minVersionDiff {
+					if _, ok := snapshotVersionDiffMapping[data.AggregateID]; !ok {
+						snapshotVersionDiffMapping[data.AggregateID] = 0
+					}
+					if snapshotVersionDiffMapping[data.AggregateID] < data.SnapshotVersion {
+						snapshotVersionDiffMapping[data.AggregateID] += 1
+						if snapshotVersionDiffMapping[data.AggregateID] >= minVersionDiff {
 							shardingMapping[shardKey][data.AggregateID] = data
 						}
 					}
@@ -122,8 +126,9 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 							delete(snapshotVersionDiffMapping, aggrID)
 						}
 						shardingMapping[shardKey] = make(map[string]*AggregateSnapshotData, batchSize)
+						time.Sleep(batchInterval)
 					}
-				case <-time.After(checkInterval):
+				case <-time.After(batchInterval / 2):
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {
@@ -143,7 +148,6 @@ func (saver *DefaultSnapshotStoreSaver) Start() {
 								wg.Add(1)
 								go func(shardKey uint8, datas map[string]*AggregateSnapshotData) {
 									defer wg.Done()
-
 									saver.batchSave(bgCtx, store, shardKey, datas)
 								}(shardKey, datas)
 							}
@@ -183,7 +187,7 @@ func (saver *DefaultSnapshotStoreSaver) batchSave(ctx context.Context, store Sna
 	err := retrying.Retry(func() error {
 		return store.SaveSnapshot(ctx, datas)
 	}, time.Second, func(retryCount int, err error) bool {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout(){
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			return true
 		}
 		return false
@@ -199,13 +203,4 @@ func (saver *DefaultSnapshotStoreSaver) batchSave(ctx context.Context, store Sna
 			slog.Uint64("data_count", uint64(len(dataMapping))),
 		)
 	}
-}
-
-type snapshotVersionDiff struct {
-	StartVersion int
-	EndVersion   int
-}
-
-func (diff *snapshotVersionDiff) Diff() int {
-	return diff.EndVersion - diff.StartVersion
 }

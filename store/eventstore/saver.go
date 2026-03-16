@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/berkaroad/squat/errors"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/utilities/goroutine"
 	"github.com/berkaroad/squat/utilities/retrying"
@@ -20,7 +21,10 @@ type EventStoreSaver interface {
 	Stop()
 }
 
-const checkInterval time.Duration = time.Millisecond * 10
+const (
+	defaultBatchSize     int           = 100
+	defaultBatchInterval time.Duration = time.Millisecond * 100
+)
 
 var _ EventStoreSaver = (*DefaultEventStoreSaver)(nil)
 
@@ -71,15 +75,15 @@ func (saver *DefaultEventStoreSaver) Start() {
 	}
 
 	if saver.status.CompareAndSwap(0, 1) {
-		batchSize := saver.BatchSize
-		if batchSize <= 0 {
-			batchSize = 100
-		}
-		saver.receiverCh = make(chan eventStreamDataWithResult, batchSize*2)
 		go func() {
+			batchSize := saver.BatchSize
+			if batchSize <= 0 {
+				batchSize = defaultBatchSize
+			}
+			saver.receiverCh = make(chan eventStreamDataWithResult, batchSize*2)
 			batchInterval := saver.BatchInterval
 			if batchInterval <= 0 {
-				batchInterval = 100 * time.Millisecond
+				batchInterval = defaultBatchInterval
 			}
 			shardingAlgorithm := saver.ShardingAlgorithm
 			if shardingAlgorithm == nil {
@@ -110,10 +114,11 @@ func (saver *DefaultEventStoreSaver) Start() {
 					}
 					if len(shardingMapping[shardKey]) >= batchSize {
 						delete(shardingTimeMapping, shardKey)
-						saver.batchSave(bgCtx, store, shardKey, shardingMapping[shardKey])
+						saver.batchSave(bgCtx, batchInterval, store, shardKey, shardingMapping[shardKey])
 						shardingMapping[shardKey] = make(map[string]eventStreamDataWithResult, batchSize)
+						time.Sleep(batchInterval)
 					}
-				case <-time.After(checkInterval):
+				case <-time.After(batchInterval / 2):
 					timeoutShardKeys := make([]uint8, 0, len(shardingTimeMapping))
 					for shardKey, timestamp := range shardingTimeMapping {
 						if time.Since(timestamp) >= batchInterval {
@@ -130,8 +135,7 @@ func (saver *DefaultEventStoreSaver) Start() {
 								wg.Add(1)
 								go func(shardKey uint8, datas map[string]eventStreamDataWithResult) {
 									defer wg.Done()
-
-									saver.batchSave(bgCtx, store, shardKey, datas)
+									saver.batchSave(bgCtx, batchInterval, store, shardKey, datas)
 								}(shardKey, datas)
 							}
 						}
@@ -161,20 +165,46 @@ func (saver *DefaultEventStoreSaver) Stop() {
 	saver.status.CompareAndSwap(2, 0)
 }
 
-func (saver *DefaultEventStoreSaver) batchSave(ctx context.Context, store EventStore, shardKey uint8, dataMapping map[string]eventStreamDataWithResult) {
-	datas := make([]EventStreamData, 0, len(dataMapping))
+func (saver *DefaultEventStoreSaver) batchSave(ctx context.Context, batchInterval time.Duration, store EventStore, shardKey uint8, dataMapping map[string]eventStreamDataWithResult) {
 	logger := logging.Get(ctx)
-	for _, data := range dataMapping {
-		datas = append(datas, *data.Data)
-	}
-	err := retrying.Retry(func() error {
-		return store.AppendEventStream(ctx, datas)
-	}, time.Second, func(retryCount int, err error) bool {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout(){
-			return true
+	retryIfCommandIDDuplicatedOrFirst := true
+	var err error
+	for retryIfCommandIDDuplicatedOrFirst {
+		retryIfCommandIDDuplicatedOrFirst = false
+		datas := make([]EventStreamData, 0, len(dataMapping))
+		for _, data := range dataMapping {
+			datas = append(datas, *data.Data)
 		}
-		return false
-	}, -1)
+
+		err = retrying.Retry(func() error {
+			return store.AppendEventStream(ctx, datas)
+		}, time.Second, func(retryCount int, err error) bool {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				return true
+			}
+			return false
+		}, -1)
+
+		if err != nil {
+			if errors.GetErrorCode(err) == ErrCodeDuplicateCommandID {
+				commandID := GetCommandIDFromErrDuplicateCommandID(err)
+				aggregateIDToSkip := ""
+				for _, data := range dataMapping {
+					if data.Data.CommandID == commandID {
+						data.ResultCh <- nil
+						aggregateIDToSkip = data.Data.AggregateID
+						break
+					}
+				}
+				if aggregateIDToSkip != "" {
+					delete(dataMapping, aggregateIDToSkip)
+					retryIfCommandIDDuplicatedOrFirst = true
+					time.Sleep(batchInterval)
+				}
+			}
+		}
+	}
+
 	for _, data := range dataMapping {
 		data.ResultCh <- err
 	}
