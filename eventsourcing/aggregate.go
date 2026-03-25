@@ -51,17 +51,19 @@ func (s *EventSourcedAggregateBase) Apply(e domain.DomainEvent, mutate func(doma
 	if e == nil {
 		panic("param 'e' is null")
 	}
+	if e.EventID() == "" {
+		panic("param 'e' has empty EventID")
+	}
+	if e.OccurTime().Unix() == 0 {
+		panic("param 'e' has empty OccurTime")
+	}
 	if mutate == nil {
 		panic("param 'mutate' is null")
 	}
 
-	// Check if this is the first event to be applied before calling mutate
-	firstEvent := len(s.publishingEvents) == 0
-
 	mutate(e)
 
-	// Only increment version if this is the first event
-	if firstEvent {
+	if !s.HasChanged() {
 		s.version++
 		s.publishingEvents = make([]domain.DomainEvent, 0)
 	}
