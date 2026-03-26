@@ -11,7 +11,7 @@ import (
 
 	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/errors"
-	"github.com/berkaroad/squat/internal/counter"
+	"github.com/berkaroad/squat/internal/gcounter"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/serialization"
 	"github.com/berkaroad/squat/utilities/retrying"
@@ -182,8 +182,8 @@ func (mb *defaultMailbox[TMessage]) initialize(mailboxCapacity int, removeSelf f
 }
 
 func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage]) {
-	counter.Begin()
-	defer counter.End()
+	gcounter.Begin()
+	defer gcounter.End()
 
 	handleResult := MessageHandleResult{}
 	defer func() {

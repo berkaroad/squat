@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/berkaroad/squat/domain"
-	"github.com/berkaroad/squat/internal/counter"
+	"github.com/berkaroad/squat/internal/gcounter"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 )
@@ -156,8 +156,8 @@ func (ed *DefaultEventDispatcher) Dispatch(data *domain.EventStream, callback fu
 		panic("not initialized")
 	}
 
-	counter.Begin()
-	defer counter.End()
+	gcounter.Begin()
+	defer gcounter.End()
 
 	resultCh := make(chan messaging.MessageHandleResult, 1)
 	mail := messaging.MailsWithResult[EventData]{

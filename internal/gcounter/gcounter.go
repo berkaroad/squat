@@ -1,4 +1,4 @@
-package counter
+package gcounter
 
 import (
 	"sync/atomic"

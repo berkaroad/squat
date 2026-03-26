@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/berkaroad/squat/internal/counter"
+	"github.com/berkaroad/squat/internal/gcounter"
 	"github.com/berkaroad/squat/logging"
 	"github.com/berkaroad/squat/messaging"
 )
@@ -151,8 +151,8 @@ func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData, callback func(me
 		panic("not initialized")
 	}
 
-	counter.Begin()
-	defer counter.End()
+	gcounter.Begin()
+	defer gcounter.End()
 
 	resultCh := make(chan messaging.MessageHandleResult, 1)
 	msg := messaging.MailsWithResult[CommandData]{
