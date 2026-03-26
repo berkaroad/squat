@@ -105,10 +105,10 @@ func (s *EventSourcedAggregateBase) Restore(snapshot AggregateSnapshot, restoreS
 		if es.StreamVersion != s.version+1 {
 			return fmt.Errorf("%w: 'eventStreams[%d].StreamVersion' should be equal to %d", ErrInvalidEventStream, i, s.version+1)
 		}
-		s.version = es.StreamVersion
 		for _, e := range es.Events {
 			mutate(e)
 		}
+		s.version = es.StreamVersion
 	}
 
 	return nil
