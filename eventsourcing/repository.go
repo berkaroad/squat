@@ -91,8 +91,8 @@ func (r *EventSourcedRepository[T]) Initialize(
 		r.binarySerializer = binarySerializer
 
 		r.aggregateStructType = typ
-		r.snapshotTypeName = reflect.New(typ).Interface().(T).Snapshot().TypeName()
-		if r.cache != nil {
+		if r.CacheEnabled && r.cache != nil {
+			r.snapshotTypeName = reflect.New(typ).Interface().(T).Snapshot().TypeName()
 			cache.SetCacheName(r.snapshotTypeName)
 		}
 		r.initialized = true
