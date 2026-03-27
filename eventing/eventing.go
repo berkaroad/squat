@@ -2,6 +2,7 @@ package eventing
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/berkaroad/squat/domain"
@@ -42,6 +43,9 @@ func (data *EventData) SetCustomExtension(ctx context.Context, key string, val s
 		metadata.Extensions = metadata.Extensions.Clone().
 			Set(messaging.ExtensionKey(key), val)
 		data.Extensions = metadata.Extensions
+		slog.Debug("EventData.SetCustomExtension",
+			slog.String("key", key),
+			slog.String("val", val))
 	}
 }
 

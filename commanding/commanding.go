@@ -2,6 +2,7 @@ package commanding
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/berkaroad/squat/domain"
@@ -44,6 +45,9 @@ func (data *CommandData) SetCustomExtension(ctx context.Context, key string, val
 		metadata.Extensions = metadata.Extensions.Clone().
 			Set(messaging.ExtensionKey(key), val)
 		data.Extensions = metadata.Extensions
+		slog.Debug("CommandData.SetCustomExtension",
+			slog.String("key", key),
+			slog.String("val", val))
 	}
 }
 
