@@ -66,7 +66,12 @@ func (saver *DefaultPublishedStoreSaver) GetPublishedVersion(ctx context.Context
 		return val.(int), nil
 	}
 
-	return saver.ps.GetPublishedVersion(ctx, aggregateID)
+	version, err := saver.ps.GetPublishedVersion(ctx, aggregateID)
+	if err != nil {
+		return 0, err
+	}
+	saver.publishedVersionCache.Store(aggregateID, version)
+	return version, nil
 }
 
 func (saver *DefaultPublishedStoreSaver) SavePublished(ctx context.Context, data PublishedEventStreamRef) {
