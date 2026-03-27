@@ -203,6 +203,8 @@ func (r *EventSourcedRepository[T]) Save(ctx context.Context, aggregate T) error
 	}
 
 	if !aggregate.HasChanged() {
+		// publish unpublished eventstream
+		r.ep.PublishUnpublished(aggregate.AggregateID(), aggregate.AggregateTypeName())
 		return domain.ErrAggregateNoChange
 	}
 	commandMeta.Extensions = commandMeta.Extensions.Clone().

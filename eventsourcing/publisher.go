@@ -51,29 +51,7 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 	})
 
 	var unpublishedEventStreams domain.EventStreamSlice
-	if eventStream.StreamVersion == 0 && len(eventStream.Events) == 0 {
-		unpublishedEventStreamDatas := retrying.RetryWithResultForever[eventstore.EventStreamDataSlice](func() (eventstore.EventStreamDataSlice, error) {
-			return eventStore.QueryEventStreamList(bgCtx, eventStream.AggregateID, publishedVersion+1, math.MaxInt)
-		}, time.Second, func(retryCount int, err error) bool {
-			if retryCount == 0 {
-				logger.Error(fmt.Sprintf("query eventstream fail: %v", err),
-					slog.Int("start_version", publishedVersion+1),
-					slog.Int("end_version", math.MaxInt),
-				)
-			}
-			return true
-		})
-
-		var err error
-		unpublishedEventStreams, err = ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
-		if err != nil {
-			textData, _ := serialization.SerializeToText(ep.serializer, unpublishedEventStreamDatas)
-			logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
-				slog.String("unpublished_eventstream", textData),
-			)
-			return
-		}
-	} else if publishedVersion < eventStream.StreamVersion-1 {
+	if publishedVersion < eventStream.StreamVersion-1 {
 		unpublishedEventStreamDatas := retrying.RetryWithResultForever[eventstore.EventStreamDataSlice](func() (eventstore.EventStreamDataSlice, error) {
 			return eventStore.QueryEventStreamList(bgCtx, eventStream.AggregateID, publishedVersion+1, eventStream.StreamVersion-1)
 		}, time.Second, func(retryCount int, err error) bool {
@@ -183,5 +161,78 @@ func (ep *eventPublisher) Publish(eventStream domain.EventStream) {
 		logger.Warn("skip published eventstream",
 			slog.Int("published_version", publishedVersion),
 		)
+	}
+}
+
+func (ep *eventPublisher) PublishUnpublished(aggregateID, aggregateType string) {
+	baseLogger := logging.Get(context.Background())
+	eventBus := ep.eb
+	eventStore := ep.es
+	publishedStore := ep.ps
+	publishedStoreSaver := ep.pss
+	serializer := ep.serializer
+	logger := baseLogger.With(
+		slog.String("aggregate_id", aggregateID),
+		slog.String("aggregate_type", aggregateType),
+	)
+	bgCtx := logging.NewContext(context.Background(), logger)
+	publishedVersion := retrying.RetryWithResultForever[int](func() (int, error) {
+		if publishedStoreSaver != nil {
+			return publishedStoreSaver.GetPublishedVersion(bgCtx, aggregateID)
+		} else {
+			return publishedStore.GetPublishedVersion(bgCtx, aggregateID)
+		}
+	}, time.Second, func(retryCount int, err error) bool {
+		if retryCount == 0 {
+			logger.Error(fmt.Sprintf("get published version fail: %v", err))
+		}
+		return true
+	})
+
+	var unpublishedEventStreams domain.EventStreamSlice
+
+	unpublishedEventStreamDatas := retrying.RetryWithResultForever[eventstore.EventStreamDataSlice](func() (eventstore.EventStreamDataSlice, error) {
+		return eventStore.QueryEventStreamList(bgCtx, aggregateID, publishedVersion+1, math.MaxInt)
+	}, time.Second, func(retryCount int, err error) bool {
+		if retryCount == 0 {
+			logger.Error(fmt.Sprintf("query eventstream fail: %v", err),
+				slog.Int("start_version", publishedVersion+1),
+				slog.Int("end_version", math.MaxInt),
+			)
+		}
+		return true
+	})
+
+	var err error
+	unpublishedEventStreams, err = ToEventStreamSlice(serializer, unpublishedEventStreamDatas)
+	if err != nil {
+		textData, _ := serialization.SerializeToText(ep.serializer, unpublishedEventStreamDatas)
+		logger.Error(fmt.Sprintf("convert EventStreamDataSlice to EventStreamSlice fail: %v", err),
+			slog.String("unpublished_eventstream", textData),
+		)
+		return
+	}
+
+	if len(unpublishedEventStreams) > 0 {
+		unpublishedLogger := baseLogger.With(
+			slog.String("aggregate_id", aggregateID),
+			slog.String("aggregate_type", aggregateType),
+		)
+		for _, unpublishedEventStream := range unpublishedEventStreams {
+			retrying.RetryForever(func() error {
+				return eventBus.Publish(unpublishedEventStream)
+			}, time.Second, func(retryCount int, err error) bool {
+				if retryCount == 0 {
+					unpublishedLogger.Error(fmt.Sprintf("publish eventstream fail: %v", err),
+						slog.Int("stream_version", unpublishedEventStream.StreamVersion),
+					)
+				}
+				return true
+			})
+			publishedVersion = unpublishedEventStream.StreamVersion
+			logger.Debug("publish unpublished eventstreams",
+				slog.Int("unpublished_version", unpublishedEventStream.StreamVersion),
+			)
+		}
 	}
 }
