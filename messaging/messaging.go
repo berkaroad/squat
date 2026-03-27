@@ -13,7 +13,7 @@ type MessageHandler[TMessage any] struct {
 
 type MessageHandlerProxy[TMessage any] interface {
 	Name() string
-	Wrap(handleFuncName string, previousHandle MessageHandleFunc[TMessage]) MessageHandleFunc[TMessage]
+	Wrap(handlerFuncName string, handleNext MessageHandleFunc[TMessage]) MessageHandleFunc[TMessage]
 }
 
 type Message struct {
