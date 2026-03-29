@@ -135,7 +135,8 @@ func BenchmarkAccount(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			wg.Add(1)
 			cmd := &CreateAccountCommand{
-				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
+				CommandBase: commanding.NewCommandBase(NewUUID()),
+				AccountId:   fmt.Sprintf("acc-%d", i),
 				Name:        fmt.Sprintf("Account %d", i),
 			}
 			go processCmdResult(wg, cmd, time.Second*30)
@@ -153,7 +154,8 @@ func BenchmarkAccount(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			wg.Add(1)
 			cmd := &DepositCommand{
-				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
+				CommandBase: commanding.NewCommandBase(NewUUID()),
+				AccountId:   fmt.Sprintf("acc-%d", i),
 				Amount:      1.1,
 			}
 			go processCmdResult(wg, cmd, time.Second*30)
@@ -171,7 +173,8 @@ func BenchmarkAccount(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			wg.Add(1)
 			cmd := &WithdrawCommand{
-				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
+				CommandBase: commanding.NewCommandBase(NewUUID()),
+				AccountId:   fmt.Sprintf("acc-%d", i),
 				Amount:      1.1,
 			}
 			go processCmdResult(wg, cmd, time.Second*30)
@@ -189,7 +192,8 @@ func BenchmarkAccount(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			wg.Add(1)
 			cmd := &RemoveAccountCommand{
-				CommandBase: commanding.NewCommandBase(NewUUID(), fmt.Sprintf("acc-%d", i)),
+				CommandBase: commanding.NewCommandBase(NewUUID()),
+				AccountId:   fmt.Sprintf("acc-%d", i),
 			}
 			go processCmdResult(wg, cmd, time.Second*30)
 		}

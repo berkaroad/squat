@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/berkaroad/squat/domain"
 	"github.com/berkaroad/squat/messaging"
 	"github.com/berkaroad/squat/serialization"
 )
@@ -61,30 +60,22 @@ type CommandHandlerGroup interface {
 
 type CommandHandlerProxy messaging.MessageHandlerProxy[CommandData]
 
-func NewCommandBase(commandID string, aggregateID string) CommandBase {
+func NewCommandBase(commandID string) CommandBase {
 	if commandID == "" {
 		panic(ErrEmptyCommandID)
 	}
-	if aggregateID == "" {
-		panic(domain.ErrEmptyAggregateID)
-	}
 	return CommandBase{
-		C_ID:          commandID,
-		C_AggregateID: aggregateID,
+		C_ID: commandID,
 	}
 }
 
 // Base of command, should override method 'TypeName()' and 'AggregateTypeName()'
 type CommandBase struct {
-	C_ID          string `json:"c_id"`
-	C_AggregateID string `json:"c_aggregate_id"`
+	C_ID string `json:"c_id"`
 }
 
 func (c CommandBase) CommandID() string {
 	return c.C_ID
-}
-func (c CommandBase) AggregateID() string {
-	return c.C_AggregateID
 }
 
 func CreateCommandMail(data *CommandData) messaging.Mail[CommandData] {

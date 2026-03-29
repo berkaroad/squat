@@ -29,14 +29,14 @@ func (ch *AccountCommandHandler) handleCreateAccount(ctx context.Context, data c
 	data.SetCustomExtension(ctx, "create", "false")
 	cmd := data.Command.(*CreateAccountCommand)
 
-	accountData, err := ch.Repo.Get(ctx, cmd.C_AggregateID)
+	accountData, err := ch.Repo.Get(ctx, cmd.AggregateID())
 	if err != nil {
 		logger.Error(err.Error())
 		return err
 	}
 
 	newAccountData, err := CreateAccount(accountData, AccountInfo{
-		ID:   cmd.C_AggregateID,
+		ID:   cmd.AggregateID(),
 		Name: cmd.Name,
 	})
 	if err != nil {
@@ -57,13 +57,13 @@ func (ch *AccountCommandHandler) handleDeposit(ctx context.Context, data command
 	data.SetCustomExtension(ctx, "update", "true")
 	cmd := data.Command.(*DepositCommand)
 
-	accountData, err := ch.Repo.Get(ctx, cmd.C_AggregateID)
+	accountData, err := ch.Repo.Get(ctx, cmd.AggregateID())
 	if err != nil {
 		logger.Error(err.Error())
 		return err
 	}
 	if accountData == nil {
-		return fmt.Errorf("%w: %s", ErrAccounteNotExists, cmd.C_AggregateID)
+		return fmt.Errorf("%w: %s", ErrAccounteNotExists, cmd.AggregateID())
 	}
 
 	err = accountData.Deposit(cmd.Amount)
@@ -85,13 +85,13 @@ func (ch *AccountCommandHandler) handleWithdraw(ctx context.Context, data comman
 	data.SetCustomExtension(ctx, "update", "true")
 	cmd := data.Command.(*WithdrawCommand)
 
-	accountData, err := ch.Repo.Get(ctx, cmd.C_AggregateID)
+	accountData, err := ch.Repo.Get(ctx, cmd.AggregateID())
 	if err != nil {
 		logger.Error(err.Error())
 		return err
 	}
 	if accountData == nil {
-		return fmt.Errorf("%w: %s", ErrAccounteNotExists, cmd.C_AggregateID)
+		return fmt.Errorf("%w: %s", ErrAccounteNotExists, cmd.AggregateID())
 	}
 
 	err = accountData.WithDraw(cmd.Amount)
@@ -113,7 +113,7 @@ func (ch *AccountCommandHandler) handleRemoveAccount(ctx context.Context, data c
 	data.SetCustomExtension(ctx, "delete", "true")
 	cmd := data.Command.(*RemoveAccountCommand)
 
-	accountData, err := ch.Repo.Get(ctx, cmd.C_AggregateID)
+	accountData, err := ch.Repo.Get(ctx, cmd.AggregateID())
 	if err != nil {
 		logger.Error(err.Error())
 		return err
