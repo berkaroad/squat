@@ -26,6 +26,8 @@ Domain-Driven Design framework, event sourcing supported, base on EDA and CQRS.
 
   * 4) Record published eventstream to `publishedstore` when published to eventbus success
 
+  * 5) Support parallel handling same event with different event handlers
+
 * 3. CQRS
 
   Send command to command bus and returns two results: one is when command handled, the other is when command-id related eventstream handled.

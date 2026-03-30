@@ -209,41 +209,49 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 			if len(handlers) == 0 {
 				noHandler = true
 			}
+			asyncHandlers := make([]MessageHandler[TMessage], 0, len(handlers))
 			for _, handler := range handlers {
-				hasPanic := false
-				err := retrying.Retry(func() (err error) {
-					defer func() {
-						if r := recover(); r != nil {
-							hasPanic = true
-							if panicErr, ok := r.(error); ok {
-								err = fmt.Errorf("panic: %w", panicErr)
-							} else {
-								err = fmt.Errorf("panic: %v", r)
-							}
-						}
-					}()
-					err = handler.Handle(handleCtx, mail.Unwrap())
-					return
-				}, time.Second, func(retryCount int, err error) bool {
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						return true
-					}
-					return false
-				}, -1)
-				if err == nil {
-					logger.Debug(fmt.Sprintf("handle %s success", data.Category),
-						slog.String(fmt.Sprintf("%s_handler", data.Category), handler.FuncName),
-					)
-				} else if errors.Is(err, domain.ErrAggregateNoChange) {
-					logger.Debug(fmt.Sprintf("handle %s success, but %v", data.Category, err),
-						slog.String(fmt.Sprintf("%s_handler", data.Category), handler.FuncName),
-					)
+				if handler.IsAsync {
+					asyncHandlers = append(asyncHandlers, handler)
 				} else {
-					handleErr = errors.Join(err)
-					if hasPanic {
-						logger.Error(fmt.Sprintf("handle %s %v", data.Category, err),
-							slog.String(fmt.Sprintf("%s_handler", data.Category), handler.FuncName),
-						)
+					err := mb.processMail(handleCtx, handler, mail, data.Category, logger)
+					if err != nil {
+						if handleErr == nil {
+							handleErr = err
+						} else {
+							handleErr = errors.Join(handleErr, err)
+						}
+					}
+				}
+			}
+			if len(asyncHandlers) == 1 {
+				err := mb.processMail(handleCtx, asyncHandlers[0], mail, data.Category, logger)
+				if err != nil {
+					if handleErr == nil {
+						handleErr = err
+					} else {
+						handleErr = errors.Join(handleErr, err)
+					}
+				}
+			} else if len(asyncHandlers) > 1 {
+				waitAsyncHandlers := sync.WaitGroup{}
+				handleErrArr := make([]error, len(handlers))
+				for handlerIndex, handler := range asyncHandlers {
+					waitAsyncHandlers.Add(1)
+					go func(handler MessageHandler[TMessage], mail Mail[TMessage]) {
+						defer waitAsyncHandlers.Done()
+						err := mb.processMail(handleCtx, handler, mail, data.Category, logger)
+						handleErrArr[handlerIndex] = err
+					}(handler, mail)
+				}
+				waitAsyncHandlers.Wait()
+				for _, err := range handleErrArr {
+					if err != nil {
+						if handleErr == nil {
+							handleErr = err
+						} else {
+							handleErr = errors.Join(handleErr, err)
+						}
 					}
 				}
 			}
@@ -267,4 +275,44 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 	if handlerErrs != nil {
 		handleResult.Err = handlerErrs
 	}
+}
+
+func (mb *defaultMailbox[TMessage]) processMail(handleCtx context.Context, handler MessageHandler[TMessage], mail Mail[TMessage], category string, logger *slog.Logger) error {
+	hasPanic := false
+	err := retrying.Retry(func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				hasPanic = true
+				if panicErr, ok := r.(error); ok {
+					err = fmt.Errorf("panic: %w", panicErr)
+				} else {
+					err = fmt.Errorf("panic: %v", r)
+				}
+			}
+		}()
+		err = handler.Handle(handleCtx, mail.Unwrap())
+		return
+	}, time.Second, func(retryCount int, err error) bool {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return true
+		}
+		return false
+	}, -1)
+	if err == nil {
+		logger.Debug(fmt.Sprintf("handle %s success", category),
+			slog.String(fmt.Sprintf("%s_handler", category), handler.FuncName),
+		)
+	} else if errors.Is(err, domain.ErrAggregateNoChange) {
+		logger.Debug(fmt.Sprintf("handle %s success, but %v", category, err),
+			slog.String(fmt.Sprintf("%s_handler", category), handler.FuncName),
+		)
+	} else {
+		if hasPanic {
+			logger.Error(fmt.Sprintf("handle %s %v", category, err),
+				slog.String(fmt.Sprintf("%s_handler", category), handler.FuncName),
+			)
+		}
+		return err
+	}
+	return nil
 }

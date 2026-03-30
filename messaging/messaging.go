@@ -9,6 +9,7 @@ type MessageHandleFunc[TMessage any] func(ctx context.Context, data TMessage) er
 type MessageHandler[TMessage any] struct {
 	Handle   MessageHandleFunc[TMessage]
 	FuncName string
+	IsAsync   bool
 }
 
 type MessageHandlerProxy[TMessage any] interface {
