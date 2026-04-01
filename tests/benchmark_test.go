@@ -104,14 +104,14 @@ func BenchmarkAccount(b *testing.B) {
 		logger.Info("Stopped")
 	})
 
-	processCmdResult := func(wg *sync.WaitGroup, cmd commanding.Command, timeout time.Duration) {
+	processCmdResult := func(wg *sync.WaitGroup, cmd commanding.Command) {
 		defer wg.Done()
 
 		cmdResult, err := cb.Execute(ctx, cmd)
 		if err != nil {
 			logger.Error(err.Error())
 		}
-		fromCommandResult := cmdResult.FromEventHandle(ctx, timeout)
+		fromCommandResult := cmdResult.FromEventHandle(ctx, time.Second*30)
 		if fromCommandResult.Err == nil {
 			return
 		}
@@ -139,7 +139,7 @@ func BenchmarkAccount(b *testing.B) {
 				AccountId:   fmt.Sprintf("acc-%d", i),
 				Name:        fmt.Sprintf("Account %d", i),
 			}
-			go processCmdResult(wg, cmd, time.Second*30)
+			go processCmdResult(wg, cmd)
 		}
 		wg.Wait()
 	})
@@ -158,7 +158,7 @@ func BenchmarkAccount(b *testing.B) {
 				AccountId:   fmt.Sprintf("acc-%d", i),
 				Amount:      1.1,
 			}
-			go processCmdResult(wg, cmd, time.Second*30)
+			go processCmdResult(wg, cmd)
 		}
 		wg.Wait()
 	})
@@ -177,7 +177,7 @@ func BenchmarkAccount(b *testing.B) {
 				AccountId:   fmt.Sprintf("acc-%d", i),
 				Amount:      1.1,
 			}
-			go processCmdResult(wg, cmd, time.Second*30)
+			go processCmdResult(wg, cmd)
 		}
 		wg.Wait()
 	})
@@ -195,7 +195,7 @@ func BenchmarkAccount(b *testing.B) {
 				CommandBase: commanding.NewCommandBase(NewUUID()),
 				AccountId:   fmt.Sprintf("acc-%d", i),
 			}
-			go processCmdResult(wg, cmd, time.Second*30)
+			go processCmdResult(wg, cmd)
 		}
 		wg.Wait()
 	})

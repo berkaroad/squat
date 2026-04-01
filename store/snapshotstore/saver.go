@@ -22,7 +22,7 @@ type SnapshotStoreSaver interface {
 
 const (
 	defaultTakeSnapshotMinVersionDiff int           = 10
-	defaultBatchSize                  int           = 100
+	defaultBatchSize                  int           = 1000
 	defaultBatchInterval              time.Duration = time.Second
 )
 

@@ -22,7 +22,7 @@ type PublishedStoreSaver interface {
 }
 
 const (
-	defaultBatchSize     int           = 100
+	defaultBatchSize     int           = 1000
 	defaultBatchInterval time.Duration = 100 * time.Millisecond
 )
 
