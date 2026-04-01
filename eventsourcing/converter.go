@@ -62,6 +62,9 @@ func ToEventStreamData(serializer serialization.TextSerializer, es *domain.Event
 			Body:      body,
 		}
 	}
+	if len(es.Events) > 0 {
+		esd.StreamTimestamp = es.Events[0].OccurTime().Unix()
+	}
 	return &esd, nil
 }
 

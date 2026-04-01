@@ -17,19 +17,21 @@ type DomainEventData struct {
 }
 
 type EventStreamData struct {
-	AggregateID   string            `json:"aggregate_id" bson:"aggregate_id"`
-	AggregateType string            `json:"aggregate_type" bson:"aggregate_type"`
-	StreamVersion int               `json:"stream_version" bson:"stream_version"`
-	Events        []DomainEventData `json:"events" bson:"events"`
-	CommandID     string            `json:"command_id" bson:"command_id"`
-	CommandType   string            `json:"command_type" bson:"command_type"`
-	Extensions    map[string]string `json:"extensions" bson:"extensions"`
+	AggregateID     string            `json:"aggregate_id" bson:"aggregate_id"`
+	AggregateType   string            `json:"aggregate_type" bson:"aggregate_type"`
+	StreamVersion   int               `json:"stream_version" bson:"stream_version"`
+	StreamTimestamp int64             `json:"stream_timestamp" bson:"stream_timestamp"`
+	Events          []DomainEventData `json:"events" bson:"events"`
+	CommandID       string            `json:"command_id" bson:"command_id"`
+	CommandType     string            `json:"command_type" bson:"command_type"`
+	Extensions      map[string]string `json:"extensions" bson:"extensions"`
 }
 
 func (esd *EventStreamData) Reset() {
 	esd.AggregateID = ""
 	esd.AggregateType = ""
 	esd.StreamVersion = 0
+	esd.StreamTimestamp = 0
 	esd.Events = nil
 	esd.CommandID = ""
 	esd.CommandType = ""
