@@ -5,9 +5,9 @@ import (
 )
 
 const (
-	Event_AccountCreated        string = "AccountCreated"
-	Event_AccountBalanceChanged string = "AccountBalanceChanged"
-	Event_AccountRemoved        string = "AccountRemoved"
+	EventAccountCreated        string = "AccountCreated"
+	EventAccountBalanceChanged string = "AccountBalanceChanged"
+	EventAccountRemoved        string = "AccountRemoved"
 )
 
 var _ domain.DomainEvent = (*AccountCreated)(nil)
@@ -21,7 +21,7 @@ type AccountCreated struct {
 }
 
 func (e AccountCreated) TypeName() string {
-	return Event_AccountCreated
+	return EventAccountCreated
 }
 
 var _ domain.DomainEvent = (*AccountBalanceChanged)(nil)
@@ -34,7 +34,7 @@ type AccountBalanceChanged struct {
 }
 
 func (e AccountBalanceChanged) TypeName() string {
-	return Event_AccountBalanceChanged
+	return EventAccountBalanceChanged
 }
 
 type BalanceChangedSource string
@@ -52,5 +52,5 @@ type AccountRemoved struct {
 }
 
 func (e AccountRemoved) TypeName() string {
-	return Event_AccountRemoved
+	return EventAccountRemoved
 }

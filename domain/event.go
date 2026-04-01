@@ -12,27 +12,26 @@ type DomainEvent interface {
 	OccurTime() time.Time
 }
 
-// Base of event, should override method 'TypeName()'
 func NewDomainEventBase(eventID string) DomainEventBase {
 	if eventID == "" {
 		panic(ErrEmptyEventID)
 	}
 	return DomainEventBase{
-		E_ID: eventID,
-		E_Ts: time.Now().Unix(),
+		EID: eventID,
+		ETS: time.Now().Unix(),
 	}
 }
 
 type DomainEventBase struct {
-	E_ID string `json:"e_id"`
-	E_Ts int64  `json:"e_ts"`
+	EID string `json:"e_id"`
+	ETS int64  `json:"e_ts"`
 }
 
 func (e DomainEventBase) EventID() string {
-	return e.E_ID
+	return e.EID
 }
 func (e DomainEventBase) OccurTime() time.Time {
-	return time.Unix(e.E_Ts, 0)
+	return time.Unix(e.ETS, 0)
 }
 
 type EventStream struct {

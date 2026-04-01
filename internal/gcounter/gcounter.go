@@ -15,6 +15,7 @@ func End() {
 	counter.Add(-1)
 }
 
+//lint:ignore U1000 used by package utilities/goroutines
 func wait() <-chan struct{} {
 	doneCh := make(chan struct{})
 	go func() {
@@ -26,6 +27,7 @@ func wait() <-chan struct{} {
 	return doneCh
 }
 
+//lint:ignore U1000 used by package utilities/goroutines
 func count() int64 {
 	return counter.Load()
 }

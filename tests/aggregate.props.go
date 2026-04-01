@@ -1,9 +1,9 @@
 package tests
 
-func (d *Account) GetName() string {
-	return d.state.Name
+func (a *Account) GetName() string {
+	return a.state.Name
 }
 
-func (d *Account) GetBalance() float64 {
-	return d.state.Balance
+func (a *Account) GetBalance() float64 {
+	return a.state.Balance
 }

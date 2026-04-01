@@ -17,9 +17,9 @@ type AccountViewGenerator struct {
 
 func (vg *AccountViewGenerator) EventHandlers() map[string]eventing.EventHandler {
 	return map[string]eventing.EventHandler{
-		Event_AccountCreated:        {Handle: vg.handleAccountCreated},
-		Event_AccountBalanceChanged: {Handle: vg.handleAccountBalanceChanged},
-		Event_AccountRemoved:        {Handle: vg.handleAccountRemoved},
+		EventAccountCreated:        {Handle: vg.handleAccountCreated},
+		EventAccountBalanceChanged: {Handle: vg.handleAccountBalanceChanged},
+		EventAccountRemoved:        {Handle: vg.handleAccountRemoved},
 	}
 }
 

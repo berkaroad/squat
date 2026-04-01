@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-var defaultTextSerializer TextSerializer = &JsonSerializer{}
+var defaultTextSerializer TextSerializer = &JSONSerializer{}
 var defaultBinarySerializer BinarySerializer = &GobSerializer{}
 
 func DefaultText() TextSerializer {

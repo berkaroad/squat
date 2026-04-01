@@ -65,17 +65,16 @@ func NewCommandBase(commandID string) CommandBase {
 		panic(ErrEmptyCommandID)
 	}
 	return CommandBase{
-		C_ID: commandID,
+		CID: commandID,
 	}
 }
 
-// Base of command, should override method 'TypeName()' and 'AggregateTypeName()'
 type CommandBase struct {
-	C_ID string `json:"c_id"`
+	CID string `json:"c_id"`
 }
 
 func (c CommandBase) CommandID() string {
-	return c.C_ID
+	return c.CID
 }
 
 func CreateCommandMail(data *CommandData) messaging.Mail[CommandData] {

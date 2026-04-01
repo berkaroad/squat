@@ -22,17 +22,17 @@ func CreateAccount(existsAccount *Account, accountInfo AccountInfo) (*Account, e
 	return result, nil
 }
 
-func (d *Account) Deposit(amount float64) error {
-	if d == nil {
+func (a *Account) Deposit(amount float64) error {
+	if a == nil {
 		return ErrAccounteNotExists
 	}
-	if d.state.IsDeleted {
+	if a.state.IsDeleted {
 		return ErrAccountHasDeleted
 	}
 	if amount <= 0 {
 		return ErrInvalidAmount
 	}
-	d.Apply(&AccountBalanceChanged{
+	a.Apply(&AccountBalanceChanged{
 		DomainEventBase: domain.NewDomainEventBase(NewUUID()),
 		Amount:          amount,
 		Source:          BalanceChangedSourceDeposit,
@@ -40,20 +40,20 @@ func (d *Account) Deposit(amount float64) error {
 	return nil
 }
 
-func (d *Account) WithDraw(amount float64) error {
-	if d == nil {
+func (a *Account) WithDraw(amount float64) error {
+	if a == nil {
 		return ErrAccounteNotExists
 	}
-	if d.state.IsDeleted {
+	if a.state.IsDeleted {
 		return ErrAccountHasDeleted
 	}
 	if amount <= 0 {
 		return ErrInvalidAmount
 	}
-	if amount > d.state.Balance {
+	if amount > a.state.Balance {
 		return ErrInsufficientBalance
 	}
-	d.Apply(&AccountBalanceChanged{
+	a.Apply(&AccountBalanceChanged{
 		DomainEventBase: domain.NewDomainEventBase(NewUUID()),
 		Amount:          -amount,
 		Source:          BalanceChangedSourceWithdraw,
@@ -61,14 +61,14 @@ func (d *Account) WithDraw(amount float64) error {
 	return nil
 }
 
-func (d *Account) Remove() error {
-	if d == nil || d.state.IsDeleted {
+func (a *Account) Remove() error {
+	if a == nil || a.state.IsDeleted {
 		return nil
 	}
-	if d.state.Balance != 0 {
+	if a.state.Balance != 0 {
 		return ErrAccountHasBalance
 	}
-	d.Apply(&AccountRemoved{
+	a.Apply(&AccountRemoved{
 		DomainEventBase: domain.NewDomainEventBase(NewUUID()),
 	})
 	return nil

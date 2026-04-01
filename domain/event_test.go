@@ -15,16 +15,16 @@ func TestNewDomainEventBase(t *testing.T) {
 
 	eIDMapper := make(map[string]struct{})
 	for _, event := range events {
-		if event.E_ID == "" {
+		if event.EID == "" {
 			t.Errorf("NewDomainEventBase() fail: E_ID is empty")
 		}
-		if event.E_Ts <= 0 {
+		if event.ETS <= 0 {
 			t.Errorf("NewDomainEventBase() fail: E_Ts is less that or equal to zero")
 		}
-		if _, ok := eIDMapper[event.E_ID]; ok {
+		if _, ok := eIDMapper[event.EID]; ok {
 			t.Errorf("NewDomainEventBase() fail: E_ID is duplicated")
 		}
-		eIDMapper[event.E_ID] = struct{}{}
+		eIDMapper[event.EID] = struct{}{}
 	}
 }
 
@@ -35,7 +35,7 @@ func TestDomainEventBase_EventID(t *testing.T) {
 	}
 
 	for _, event := range events {
-		if event.E_ID != event.EventID() {
+		if event.EID != event.EventID() {
 			t.Errorf("NewDomainEventBase.EventID() not equal with E_ID")
 		}
 	}
@@ -48,7 +48,7 @@ func TestDomainEventBase_OccurTime(t *testing.T) {
 	}
 
 	for _, event := range events {
-		if event.E_Ts != event.OccurTime().Unix() {
+		if event.ETS != event.OccurTime().Unix() {
 			t.Errorf("NewDomainEventBase.OccurTime() not equal with E_Ts")
 		}
 	}

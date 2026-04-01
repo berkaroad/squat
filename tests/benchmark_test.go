@@ -47,6 +47,7 @@ func BenchmarkAccount(b *testing.B) {
 			GetMailboxName:     func(aggregateID, aggregateTypeName string) string { return aggregateID },
 			AutoReleaseTimeout: 30 * time.Second,
 		}, notifier)
+	cd.AddProxy(&IdempotentCommandHandlerProxy{})
 	var cb commanding.CommandBus = inmemorycb.Default().Initialize(cd, watcher)
 	var commandprocessor commanding.CommandProcessor = cb.(commanding.CommandProcessor)
 
@@ -56,6 +57,7 @@ func BenchmarkAccount(b *testing.B) {
 			GetMailboxName:     func(aggregateID, aggregateTypeName string) string { return aggregateID },
 			AutoReleaseTimeout: 30 * time.Second,
 		}, notifier)
+	ed.AddProxy(&IdempotentEventHandlerProxy{})
 	var eb eventing.EventBus = inmemoryeb.Default().Initialize(ed)
 	var eventprocessor eventing.EventProcessor = eb.(eventing.EventProcessor)
 
@@ -84,9 +86,7 @@ func BenchmarkAccount(b *testing.B) {
 			(&caching.MemoryCache{CleanInterval: time.Second * 30}).Initialize(binarySerializer),
 			textSerializer, binarySerializer),
 	})
-	cd.AddProxy(&IdempotentCommandHandlerProxy{})
 	ed.SubscribeMulti(&AccountViewGenerator{})
-	ed.AddProxy(&IdempotentEventHandlerProxy{})
 
 	ess.Start()
 	pss.Start()
@@ -136,7 +136,7 @@ func BenchmarkAccount(b *testing.B) {
 			wg.Add(1)
 			cmd := &CreateAccountCommand{
 				CommandBase: commanding.NewCommandBase(NewUUID()),
-				AccountId:   fmt.Sprintf("acc-%d", i),
+				AccountID:   fmt.Sprintf("acc-%d", i),
 				Name:        fmt.Sprintf("Account %d", i),
 			}
 			go processCmdResult(wg, cmd)
@@ -155,7 +155,7 @@ func BenchmarkAccount(b *testing.B) {
 			wg.Add(1)
 			cmd := &DepositCommand{
 				CommandBase: commanding.NewCommandBase(NewUUID()),
-				AccountId:   fmt.Sprintf("acc-%d", i),
+				AccountID:   fmt.Sprintf("acc-%d", i),
 				Amount:      1.1,
 			}
 			go processCmdResult(wg, cmd)
@@ -174,7 +174,7 @@ func BenchmarkAccount(b *testing.B) {
 			wg.Add(1)
 			cmd := &WithdrawCommand{
 				CommandBase: commanding.NewCommandBase(NewUUID()),
-				AccountId:   fmt.Sprintf("acc-%d", i),
+				AccountID:   fmt.Sprintf("acc-%d", i),
 				Amount:      1.1,
 			}
 			go processCmdResult(wg, cmd)
@@ -193,7 +193,7 @@ func BenchmarkAccount(b *testing.B) {
 			wg.Add(1)
 			cmd := &RemoveAccountCommand{
 				CommandBase: commanding.NewCommandBase(NewUUID()),
-				AccountId:   fmt.Sprintf("acc-%d", i),
+				AccountID:   fmt.Sprintf("acc-%d", i),
 			}
 			go processCmdResult(wg, cmd)
 		}

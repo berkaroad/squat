@@ -5,17 +5,17 @@ import (
 	"io"
 )
 
-var _ TextSerializer = (*JsonSerializer)(nil)
+var _ TextSerializer = (*JSONSerializer)(nil)
 
-type JsonSerializer struct {
+type JSONSerializer struct {
 }
 
-func (s *JsonSerializer) Serialize(w io.Writer, v any) error {
+func (s *JSONSerializer) Serialize(w io.Writer, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-func (s *JsonSerializer) Deserialize(r io.Reader, v any) error {
+func (s *JSONSerializer) Deserialize(r io.Reader, v any) error {
 	return json.NewDecoder(r).Decode(v)
 }
 
-func (s *JsonSerializer) TextSerializer() {}
+func (s *JSONSerializer) TextSerializer() {}

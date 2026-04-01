@@ -17,10 +17,10 @@ type AccountCommandHandler struct {
 
 func (ch *AccountCommandHandler) CommandHandlers() map[string]commanding.CommandHandler {
 	return map[string]commanding.CommandHandler{
-		Command_CreateAccount: {Handle: ch.handleCreateAccount},
-		Command_Deposit:       {Handle: ch.handleDeposit},
-		Command_Withdraw:      {Handle: ch.handleWithdraw},
-		Command_RemoveAccount: {Handle: ch.handleRemoveAccount},
+		CommandCreateAccount: {Handle: ch.handleCreateAccount},
+		CommandDeposit:       {Handle: ch.handleDeposit},
+		CommandWithdraw:      {Handle: ch.handleWithdraw},
+		CommandRemoveAccount: {Handle: ch.handleRemoveAccount},
 	}
 }
 

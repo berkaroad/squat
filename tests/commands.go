@@ -5,26 +5,26 @@ import (
 )
 
 const (
-	Command_CreateAccount string = "CreateAccount"
-	Command_Deposit       string = "Deposit"
-	Command_Withdraw      string = "Withdraw"
-	Command_RemoveAccount string = "RemoveAccount"
+	CommandCreateAccount string = "CreateAccount"
+	CommandDeposit       string = "Deposit"
+	CommandWithdraw      string = "Withdraw"
+	CommandRemoveAccount string = "RemoveAccount"
 )
 
 var _ commanding.Command = (*CreateAccountCommand)(nil)
 
 type CreateAccountCommand struct {
 	commanding.CommandBase
-	AccountId string
+	AccountID string
 	Name      string
 }
 
 func (c CreateAccountCommand) TypeName() string {
-	return Command_CreateAccount
+	return CommandCreateAccount
 }
 
 func (c CreateAccountCommand) AggregateID() string {
-	return c.AccountId
+	return c.AccountID
 }
 
 func (c CreateAccountCommand) AggregateTypeName() string {
@@ -35,16 +35,16 @@ var _ commanding.Command = (*DepositCommand)(nil)
 
 type DepositCommand struct {
 	commanding.CommandBase
-	AccountId string
+	AccountID string
 	Amount    float64
 }
 
 func (c DepositCommand) TypeName() string {
-	return Command_Deposit
+	return CommandDeposit
 }
 
 func (c DepositCommand) AggregateID() string {
-	return c.AccountId
+	return c.AccountID
 }
 
 func (c DepositCommand) AggregateTypeName() string {
@@ -55,16 +55,16 @@ var _ commanding.Command = (*WithdrawCommand)(nil)
 
 type WithdrawCommand struct {
 	commanding.CommandBase
-	AccountId string
+	AccountID string
 	Amount    float64
 }
 
 func (c WithdrawCommand) TypeName() string {
-	return Command_Withdraw
+	return CommandWithdraw
 }
 
 func (c WithdrawCommand) AggregateID() string {
-	return c.AccountId
+	return c.AccountID
 }
 
 func (c WithdrawCommand) AggregateTypeName() string {
@@ -75,15 +75,15 @@ var _ commanding.Command = (*RemoveAccountCommand)(nil)
 
 type RemoveAccountCommand struct {
 	commanding.CommandBase
-	AccountId string
+	AccountID string
 }
 
 func (c RemoveAccountCommand) TypeName() string {
-	return Command_RemoveAccount
+	return CommandRemoveAccount
 }
 
 func (c RemoveAccountCommand) AggregateID() string {
-	return c.AccountId
+	return c.AccountID
 }
 
 func (c RemoveAccountCommand) AggregateTypeName() string {
