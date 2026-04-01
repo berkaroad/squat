@@ -238,11 +238,11 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 				handleErrArr := make([]error, len(handlers))
 				for handlerIndex, handler := range asyncHandlers {
 					waitAsyncHandlers.Add(1)
-					go func(handler MessageHandler[TMessage], mail Mail[TMessage]) {
+					go func(handler MessageHandler[TMessage], mail Mail[TMessage], handlerIndex int) {
 						defer waitAsyncHandlers.Done()
 						err := mb.processMail(handleCtx, handler, mail, data.Category, logger)
 						handleErrArr[handlerIndex] = err
-					}(handler, mail)
+					}(handler, mail, handlerIndex)
 				}
 				waitAsyncHandlers.Wait()
 				for _, err := range handleErrArr {
