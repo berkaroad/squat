@@ -11,7 +11,7 @@ import (
 
 	"github.com/berkaroad/squat/caching"
 	"github.com/berkaroad/squat/commanding"
-	"github.com/berkaroad/squat/commanding/inmemorycb"
+	"github.com/berkaroad/squat/commanding/inmemorycs"
 	"github.com/berkaroad/squat/errors"
 	"github.com/berkaroad/squat/eventing"
 	"github.com/berkaroad/squat/eventing/inmemoryeb"
@@ -48,8 +48,7 @@ func BenchmarkAccount(b *testing.B) {
 			AutoReleaseTimeout: 30 * time.Second,
 		}, notifier)
 	cd.AddProxy(&IdempotentCommandHandlerProxy{})
-	var cb commanding.CommandBus = inmemorycb.Default().Initialize(cd, watcher)
-	var commandprocessor commanding.CommandProcessor = cb.(commanding.CommandProcessor)
+	var cs commanding.CommandService = inmemorycs.Default().Initialize(cd, watcher)
 
 	var ed eventing.EventDispatcher = (&eventing.DefaultEventDispatcher{}).
 		Initialize(&messaging.DefaultMailboxProvider[eventing.EventData]{
@@ -92,11 +91,9 @@ func BenchmarkAccount(b *testing.B) {
 	pss.Start()
 	sss.Start()
 	eventprocessor.Start()
-	commandprocessor.Start()
 
 	b.Cleanup(func() {
 		logger.Info("Stopping...")
-		commandprocessor.Stop()
 		eventprocessor.Stop()
 		sss.Stop()
 		pss.Stop()
@@ -107,7 +104,7 @@ func BenchmarkAccount(b *testing.B) {
 	processCmdResult := func(wg *sync.WaitGroup, cmd commanding.Command) {
 		defer wg.Done()
 
-		cmdResult, err := cb.Execute(ctx, cmd)
+		cmdResult, err := cs.Execute(ctx, cmd)
 		if err != nil {
 			logger.Error(err.Error())
 		}

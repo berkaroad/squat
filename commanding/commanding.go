@@ -18,19 +18,9 @@ type Command interface {
 	AggregateTypeName() string
 }
 
-type CommandBus interface {
+type CommandService interface {
 	Send(ctx context.Context, cmd Command) error
 	Execute(ctx context.Context, cmd Command) (*CommandHandleResult, error)
-}
-
-type CommandProcessorStatistic struct {
-	FetchedCount int64
-}
-
-type CommandProcessor interface {
-	Start()
-	Stop()
-	Stats() CommandProcessorStatistic
 }
 
 type CommandData struct {

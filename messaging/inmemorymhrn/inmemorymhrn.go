@@ -21,11 +21,7 @@ type InMemoryMessageHandleResultNotifier struct {
 }
 
 func (notifier *InMemoryMessageHandleResultNotifier) Notify(endpoint string, messageID string, resultProvider string, result messaging.MessageHandleResult) {
-	key := fmt.Sprintf("%s:%s", messageID, resultProvider)
-	if val, ok := notifier.resultMapper.LoadAndDelete(key); ok {
-		writeResultCh := val.(chan messaging.MessageHandleResult)
-		writeResultCh <- result
-	}
+	notifier.Receive(messageID, resultProvider, result)
 }
 
 func (notifier *InMemoryMessageHandleResultNotifier) Watch(messageID string, resultProvider string) messaging.MessageHandleResultWatchItem {
@@ -37,6 +33,14 @@ func (notifier *InMemoryMessageHandleResultNotifier) Watch(messageID string, res
 		unwatch: func() {
 			notifier.resultMapper.Delete(key)
 		},
+	}
+}
+
+func (notifier *InMemoryMessageHandleResultNotifier) Receive(messageID string, resultProvider string, result messaging.MessageHandleResult) {
+	key := fmt.Sprintf("%s:%s", messageID, resultProvider)
+	if val, ok := notifier.resultMapper.LoadAndDelete(key); ok {
+		writeResultCh := val.(chan messaging.MessageHandleResult)
+		writeResultCh <- result
 	}
 }
 
