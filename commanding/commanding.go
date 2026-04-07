@@ -28,14 +28,14 @@ type CommandData struct {
 	Extensions map[string]string
 }
 
-func (data *CommandData) SetCustomExtension(ctx context.Context, key string, val string) {
+func (data *CommandData) SetCustomExtension(ctx context.Context, key messaging.ExtensionKey, val string) {
 	metadata := messaging.FromContext(ctx)
-	if metadata != nil && metadata.Category == MailCategory && !strings.HasPrefix(key, messaging.SysExtensionKeyPrefix) {
+	if metadata != nil && metadata.Category == MailCategory && !strings.HasPrefix(string(key), messaging.SysExtensionKeyPrefix) {
 		metadata.Extensions = metadata.Extensions.Clone().
-			Set(messaging.ExtensionKey(key), val)
+			Set(key, val)
 		data.Extensions = metadata.Extensions
 		slog.Debug("CommandData.SetCustomExtension",
-			slog.String("key", key),
+			slog.String("key", string(key)),
 			slog.String("val", val))
 	}
 }
