@@ -54,7 +54,7 @@ func (cs *InMemoryCommandService) Send(ctx context.Context, cmd commanding.Comma
 		return nil
 	} else {
 		if eventMetadata.Category == commanding.MailCategory {
-			panic("'InMemoryCommandBus.Send(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
+			panic("'InMemoryCommandService.Send(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
 		}
 		cs.dispatcher.Dispatch(&commanding.CommandData{
 			Command: cmd,
@@ -84,7 +84,7 @@ func (cs *InMemoryCommandService) Execute(ctx context.Context, cmd commanding.Co
 		return commanding.NewCommandHandleResult(fromCommandWatchItem, fromEventWatchItem), nil
 	} else {
 		if eventMetadata.Category == commanding.MailCategory {
-			panic("'InMemoryCommandBus.Execute(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
+			panic("'InMemoryCommandService.Execute(context.Context, commanding.Command)' couldn't be invoked in CommandHandler")
 		}
 
 		cs.dispatcher.Dispatch(&commanding.CommandData{

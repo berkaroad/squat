@@ -7,7 +7,6 @@ const (
 	ErrCodeWaitFromCommandHandlerTimeout string = errors.SysErrCodePrefix + "WaitFromCommandHandlerTimeout"
 	ErrCodeWaitFromEventHandlerTimeout   string = errors.SysErrCodePrefix + "WaitFromEventHandlerTimeout"
 	ErrCodeWaitCommandResultCancelled    string = errors.SysErrCodePrefix + "WaitCommandResultCancelled"
-	ErrCodeStoppedCommandBus             string = errors.SysErrCodePrefix + "StoppedCommandBus"
 )
 
 var (
