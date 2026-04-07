@@ -179,7 +179,7 @@ func (cd *DefaultCommandDispatcher) Dispatch(data *CommandData, callback func(me
 				if noticeServiceEndpoint, ok := messaging.Extensions(data.Extensions).Get(messaging.ExtensionKeyNoticeServiceEndpoint); ok {
 					logger := logging.Get(context.Background())
 					cd.notifier.Notify(noticeServiceEndpoint, data.CommandID(), CommandHandleResultProvider, result)
-					logger.Info(fmt.Sprintf("notify commandbus command handled from %s", CommandHandleResultProvider),
+					logger.Debug(fmt.Sprintf("notify that command handled from %s", CommandHandleResultProvider),
 						slog.String("command_id", data.CommandID()),
 						slog.String("command_type", data.TypeName()),
 						slog.String("aggregate_id", data.AggregateID()),
