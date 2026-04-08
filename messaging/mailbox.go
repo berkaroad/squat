@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,6 +54,14 @@ type MailsWithResult[TMessage any] struct {
 type MessageHandleResult struct {
 	Err        error
 	Extensions Extensions
+}
+
+func (r MessageHandleResult) FailedMessageHandlers() string {
+	if r.Extensions == nil {
+		return ""
+	}
+	val, _ := r.Extensions.Get(ExtensionKeyFailedMessageHandlers)
+	return val
 }
 
 var _ MailboxProvider[any] = (*DefaultMailboxProvider[any])(nil)
@@ -193,6 +202,7 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 
 	allHandlers := mb.handlers
 	var handlerErrs error
+	failedHandlers := make([]string, 0, len(allHandlers))
 	for _, mail := range data.Mails {
 		metadata := mail.Metadata()
 		logger := mb.logger.With(
@@ -221,6 +231,7 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 						} else {
 							handleErr = errors.Join(handleErr, err)
 						}
+						failedHandlers = append(failedHandlers, handler.FuncName)
 					}
 				}
 			}
@@ -236,12 +247,16 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 			} else if len(asyncHandlers) > 1 {
 				waitAsyncHandlers := sync.WaitGroup{}
 				handleErrArr := make([]error, len(handlers))
+				failedHandlerArr := make([]string, len(handlers))
 				for handlerIndex, handler := range asyncHandlers {
 					waitAsyncHandlers.Add(1)
 					go func(handler MessageHandler[TMessage], mail Mail[TMessage], handlerIndex int) {
 						defer waitAsyncHandlers.Done()
 						err := mb.processMail(handleCtx, handler, mail, data.Category, logger)
 						handleErrArr[handlerIndex] = err
+						if err != nil {
+							failedHandlerArr[handlerIndex] = handler.FuncName
+						}
 					}(handler, mail, handlerIndex)
 				}
 				waitAsyncHandlers.Wait()
@@ -252,6 +267,11 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 						} else {
 							handleErr = errors.Join(handleErr, err)
 						}
+					}
+				}
+				for _, failedHandler := range failedHandlerArr {
+					if failedHandler != "" {
+						failedHandlers = append(failedHandlers, failedHandler)
 					}
 				}
 			}
@@ -274,6 +294,7 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 
 	if handlerErrs != nil {
 		handleResult.Err = handlerErrs
+		handleResult.Extensions = handleResult.Extensions.Set(ExtensionKeyFailedMessageHandlers, strings.Join(failedHandlers, ","))
 	}
 }
 

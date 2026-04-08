@@ -10,6 +10,7 @@ const (
 	ExtensionKeyFromMessageID         ExtensionKey = ExtensionKey(SysExtensionKeyPrefix) + "FromMessageID"
 	ExtensionKeyFromMessageType       ExtensionKey = ExtensionKey(SysExtensionKeyPrefix) + "FromMessageType"
 	ExtensionKeyAggregateChanged      ExtensionKey = ExtensionKey(SysExtensionKeyPrefix) + "AggregateChanged"
+	ExtensionKeyFailedMessageHandlers ExtensionKey = ExtensionKey(SysExtensionKeyPrefix) + "FailedMessageHandlers"
 )
 
 // Extensions is not concurrent-safe.
