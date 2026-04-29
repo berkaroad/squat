@@ -224,54 +224,48 @@ func (mb *defaultMailbox[TMessage]) processMails(data MailsWithResult[TMessage])
 				if handler.IsAsync {
 					asyncHandlers = append(asyncHandlers, handler)
 				} else {
-					err := mb.processMail(handleCtx, handler, mail, data.Category, logger)
-					if err != nil {
-						if handleErr == nil {
-							handleErr = err
-						} else {
-							handleErr = errors.Join(handleErr, err)
-						}
+					handleErr = mb.processMail(handleCtx, handler, mail, data.Category, logger)
+					if handleErr != nil {
 						failedHandlers = append(failedHandlers, handler.FuncName)
+						break
 					}
 				}
 			}
-			if len(asyncHandlers) == 1 {
-				err := mb.processMail(handleCtx, asyncHandlers[0], mail, data.Category, logger)
-				if err != nil {
-					if handleErr == nil {
-						handleErr = err
-					} else {
-						handleErr = errors.Join(handleErr, err)
+			if handleErr == nil {
+				if len(asyncHandlers) == 1 {
+					handleErr = mb.processMail(handleCtx, asyncHandlers[0], mail, data.Category, logger)
+					if handleErr != nil {
+						failedHandlers = append(failedHandlers, asyncHandlers[0].FuncName)
 					}
-				}
-			} else if len(asyncHandlers) > 1 {
-				waitAsyncHandlers := sync.WaitGroup{}
-				handleErrArr := make([]error, len(handlers))
-				failedHandlerArr := make([]string, len(handlers))
-				for handlerIndex, handler := range asyncHandlers {
-					waitAsyncHandlers.Add(1)
-					go func(handler MessageHandler[TMessage], mail Mail[TMessage], handlerIndex int) {
-						defer waitAsyncHandlers.Done()
-						err := mb.processMail(handleCtx, handler, mail, data.Category, logger)
-						handleErrArr[handlerIndex] = err
+				} else if len(asyncHandlers) > 1 {
+					waitAsyncHandlers := sync.WaitGroup{}
+					handleErrArr := make([]error, len(handlers))
+					failedHandlerArr := make([]string, len(handlers))
+					for handlerIndex, handler := range asyncHandlers {
+						waitAsyncHandlers.Add(1)
+						go func(handler MessageHandler[TMessage], mail Mail[TMessage], handlerIndex int) {
+							defer waitAsyncHandlers.Done()
+							err := mb.processMail(handleCtx, handler, mail, data.Category, logger)
+							handleErrArr[handlerIndex] = err
+							if err != nil {
+								failedHandlerArr[handlerIndex] = handler.FuncName
+							}
+						}(handler, mail, handlerIndex)
+					}
+					waitAsyncHandlers.Wait()
+					for _, err := range handleErrArr {
 						if err != nil {
-							failedHandlerArr[handlerIndex] = handler.FuncName
-						}
-					}(handler, mail, handlerIndex)
-				}
-				waitAsyncHandlers.Wait()
-				for _, err := range handleErrArr {
-					if err != nil {
-						if handleErr == nil {
-							handleErr = err
-						} else {
-							handleErr = errors.Join(handleErr, err)
+							if handleErr == nil {
+								handleErr = err
+							} else {
+								handleErr = errors.Join(handleErr, err)
+							}
 						}
 					}
-				}
-				for _, failedHandler := range failedHandlerArr {
-					if failedHandler != "" {
-						failedHandlers = append(failedHandlers, failedHandler)
+					for _, failedHandler := range failedHandlerArr {
+						if failedHandler != "" {
+							failedHandlers = append(failedHandlers, failedHandler)
+						}
 					}
 				}
 			}
