@@ -2,7 +2,67 @@
 
 Domain-Driven Design framework, event sourcing supported, base on EDA and CQRS.
 
-## Feature List
+## I. Architecture Design
+
+* 1. Data Flow Diagram
+
+  ```mermaid
+  sequenceDiagram
+      participant C as Client
+      participant CS as CommandService
+      participant CH as CommandHandlers
+      participant R as Repository
+      participant ES as EventStore
+      participant EB as EventBus
+      participant EH as EventHandlers
+      participant RM as ReadModel
+  
+      C->>CS: send command
+      activate CS
+      CS->>CH: dispatch command
+      activate CH
+  
+      alt Business Logic Checking Success
+          CH->>CH: business logic checking, execute business logic
+          CH->>R: save aggregate state
+          activate R
+          R->>ES: save aggregate state
+          activate ES
+          ES-->>R: confirm of save success 
+          deactivate ES
+          R-->>EB: push to event bus
+          activate EB
+          R-->>CH: confirm of save success 
+          deactivate R
+          EB-->>EH: dispatch event
+          activate EH
+          EH->>EH: handle event
+          EH->>RM: update read-model
+          activate RM
+          RM-->>EH: confirm of update success
+          deactivate RM
+          EH-->>EB: handle event complete
+          deactivate EH
+          EB-->>CS: notify that handle event success
+          deactivate EB
+          CS-->>C: execute command success
+      else Business Logic Checking Fail
+          CH-->>CS: return error
+          CS-->>C: execute command fail
+      end
+  
+      deactivate CH
+      deactivate CS
+      
+      C->>RM: query data
+      activate RM
+      RM-->>C: return data
+      deactivate RM
+  
+      Note right of C: process of CQRS and eventsourcing is end
+  ```
+
+## II. Feature List
 
 * 1. Event Sourcing
 
