@@ -10,49 +10,64 @@ Domain-Driven Design framework, event sourcing supported, base on EDA and CQRS.
   sequenceDiagram
       participant C as Client
       participant CS as CommandService
+      participant CD as CommandDispatcher
       participant CH as CommandHandlers
       participant R as Repository
       participant ES as EventStore
       participant EB as EventBus
+      participant ED as EventDispatcher
       participant EH as EventHandlers
       participant RM as ReadModel
   
       C->>CS: send command
       activate CS
-      CS->>CH: dispatch command
+      CS->>CD: transport command
+      activate CD
+      CD->>CH: dispatch command
       activate CH
   
       alt Business Logic Checking Success
           CH->>CH: business logic checking, execute business logic
           CH->>R: save aggregate state
           activate R
-          R->>ES: save aggregate state
+          R->>ES: save eventstream
           activate ES
           ES-->>R: confirm of save success 
           deactivate ES
-          R-->>EB: push to event bus
+          R->>EB: push to event bus
           activate EB
           R-->>CH: confirm of save success 
           deactivate R
-          EB-->>EH: dispatch event
+          CH-->>CD: handle command complete
+          deactivate CH
+          CD->>CS: notify that handle command success
+          deactivate CD
+          CS-->>C: execute command success from command
+          deactivate CS
+          EB->>ED: transport event
+          activate ED
+          deactivate EB
+          ED->>EH: dispatch event
           activate EH
           EH->>EH: handle event
           EH->>RM: update read-model
           activate RM
           RM-->>EH: confirm of update success
           deactivate RM
-          EH-->>EB: handle event complete
+          EH-->>ED: handle event complete
           deactivate EH
-          EB-->>CS: notify that handle event success
-          deactivate EB
-          CS-->>C: execute command success
+          deactivate ED
       else Business Logic Checking Fail
-          CH-->>CS: return error
+          activate CH
+          CH-->>CD: return error
+          activate CD
+          deactivate CH
+          CD->>CS: notify that handle command fail
+          activate CS
+          deactivate CD
           CS-->>C: execute command fail
+          deactivate CS
       end
-  
-      deactivate CH
-      deactivate CS
       
       C->>RM: query data
       activate RM
