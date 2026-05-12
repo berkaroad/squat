@@ -19,8 +19,7 @@ type Command interface {
 }
 
 type CommandService interface {
-	Send(ctx context.Context, cmd Command) error
-	Execute(ctx context.Context, cmd Command) (*CommandHandleResult, error)
+	Send(ctx context.Context, cmd Command) (*CommandHandleResult, error)
 }
 
 type CommandData struct {

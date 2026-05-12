@@ -104,7 +104,7 @@ func BenchmarkAccount(b *testing.B) {
 	processCmdResult := func(wg *sync.WaitGroup, cmd commanding.Command) {
 		defer wg.Done()
 
-		cmdResult, err := cs.Execute(ctx, cmd)
+		cmdResult, err := cs.Send(ctx, cmd)
 		if err != nil {
 			logger.Error(err.Error())
 		}
